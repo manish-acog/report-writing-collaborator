@@ -590,6 +590,9 @@ document_workspace/
     └── failures/
 ```
 
+`document_workspace/` above is one published version's root, addressed on
+disk as `<publish_root>/<workspace_id>/<workspace_version>/`.
+
 ---
 
 ## Manifest
@@ -600,7 +603,7 @@ Example:
 
 ```json
 {
-  "workspace_id": "550e8400-e29b-41d4-a716-446655440000",
+  "workspace_id": "ws_550e8400-e29b-41d4-a716-446655440000",
   "workspace_version": 2,
   "previous_version": 1,
   "workspace_state": "published",
@@ -612,7 +615,8 @@ Example:
       "source_type": "pdf",
       "original_path": "sources/src_a82f91c43b7e/original.pdf",
       "normalized_path": "normalized/src_a82f91c43b7e/document.md",
-      "sections_path": "normalized/src_a82f91c43b7e/document.sections.json"
+      "sections_path": "normalized/src_a82f91c43b7e/document.sections.json",
+      "parent_source_id": null
     }
   ],
   "assets": [],
@@ -646,7 +650,7 @@ a durable pointer across versions.
 
 Rules:
 
-- a new lineage receives a UUID
+- a new lineage receives a UUID, prefixed `ws_`
 - all later versions in that lineage keep the same `workspace_id`
 - `workspace_version` is a monotonically increasing integer starting at `1`
 - each version records `previous_version`

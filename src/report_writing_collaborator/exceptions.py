@@ -16,3 +16,7 @@ class DocumentParseError(DocumentNormalizationError):
 
 class StructureIndexingError(Exception):
     """Raised when normalized Markdown cannot be read or indexed."""
+
+
+class WorkspaceBuildError(Exception):
+    """Raised when a workspace cannot be built or published."""

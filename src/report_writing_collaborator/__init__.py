@@ -9,6 +9,9 @@ __all__ = [
     "EmbeddedFile",
     "FileHashes",
     "IndexerTooling",
+    "ManifestAsset",
+    "ManifestEmbeddedFile",
+    "ManifestSource",
     "NormalizedDocument",
     "PageHeaderFooter",
     "PageMapping",
@@ -19,6 +22,11 @@ __all__ = [
     "StructureIndexingError",
     "Tooling",
     "UnsupportedDocumentTypeError",
+    "WorkspaceBuildError",
+    "WorkspaceConfig",
+    "WorkspaceManifest",
+    "WorkspaceSource",
+    "build_workspace",
 ]
 
 from report_writing_collaborator.document_normalizer import (
@@ -39,6 +47,7 @@ from report_writing_collaborator.exceptions import (
     DocumentParseError,
     StructureIndexingError,
     UnsupportedDocumentTypeError,
+    WorkspaceBuildError,
 )
 from report_writing_collaborator.structure_indexer import (
     DocumentStructure,
@@ -46,4 +55,13 @@ from report_writing_collaborator.structure_indexer import (
     Section,
     StructureHashes,
     StructureIndexer,
+)
+from report_writing_collaborator.workspace_builder import (
+    ManifestAsset,
+    ManifestEmbeddedFile,
+    ManifestSource,
+    WorkspaceConfig,
+    WorkspaceManifest,
+    WorkspaceSource,
+    build_workspace,
 )
