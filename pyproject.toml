@@ -1,0 +1,31 @@
+[project]
+name = "report-writing-collaborator"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf==1.28.2",
+    "pymupdf4llm==1.28.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.0",
+    "ruff==0.16.3",
+    "ty==0.0.73",
+]
+
+[build-system]
+requires = ["uv_build==0.8.15"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "TCH", "RUF"]
+ignore = ["E501"]
+
+[tool.ty.environment]
+python-version = "3.11"
