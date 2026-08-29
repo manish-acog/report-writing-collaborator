@@ -5,11 +5,17 @@ __all__ = [
     "DocumentNormalizationError",
     "DocumentNormalizer",
     "DocumentParseError",
+    "DocumentStructure",
     "EmbeddedFile",
     "FileHashes",
+    "IndexerTooling",
     "NormalizedDocument",
     "PageMapping",
+    "Section",
     "SourceSpec",
+    "StructureHashes",
+    "StructureIndexer",
+    "StructureIndexingError",
     "Tooling",
     "UnsupportedDocumentTypeError",
 ]
@@ -29,5 +35,13 @@ from report_writing_collaborator.exceptions import (
     DocumentConversionError,
     DocumentNormalizationError,
     DocumentParseError,
+    StructureIndexingError,
     UnsupportedDocumentTypeError,
+)
+from report_writing_collaborator.structure_indexer import (
+    DocumentStructure,
+    IndexerTooling,
+    Section,
+    StructureHashes,
+    StructureIndexer,
 )

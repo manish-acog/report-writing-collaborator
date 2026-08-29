@@ -12,3 +12,7 @@ class DocumentConversionError(DocumentNormalizationError):
 
 class DocumentParseError(DocumentNormalizationError):
     """Raised when a PDF cannot be inspected or normalized."""
+
+
+class StructureIndexingError(Exception):
+    """Raised when normalized Markdown cannot be read or indexed."""
