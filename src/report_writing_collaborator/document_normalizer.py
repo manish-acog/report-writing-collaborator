@@ -29,11 +29,12 @@ from report_writing_collaborator.exceptions import (
 _SOURCE_PREFIX = "src_"
 _SOURCE_ID_LENGTH = 12
 _HASH_CHUNK_SIZE = 1024 * 1024
+_VERSION_PROBE_TIMEOUT_SECONDS = 30
 _CONVERSION_TIMEOUT_SECONDS = 120
 _LIBREOFFICE_VERSION = "26.8.0"
 _NORMALIZER_NAME = "pymupdf4llm"
 _MARKDOWN_NAME = "document.md"
-_HEADER_FOOTER_WARNING = "Header/footer filtering removed all text; content preserved"
+_HEADER_FOOTER_CLASSES = frozenset({"page-header", "page-footer"})
 _PDF_TYPES = frozenset({"pdf"})
 _OFFICE_TYPES = frozenset({"doc", "docx", "ppt", "pptx"})
 _SUPPORTED_TYPES = _PDF_TYPES | _OFFICE_TYPES
@@ -78,6 +79,13 @@ class PageMapping:
 
 
 @dataclass(frozen=True, slots=True)
+class PageHeaderFooter:
+    page_number: int
+    header: str | None
+    footer: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class FileHashes:
     source_sha256: str
     normalized_sha256: str
@@ -102,6 +110,7 @@ class NormalizedDocument:
     embedded_files: tuple[EmbeddedFile, ...]
     links: tuple[DocumentLink, ...]
     page_map: tuple[PageMapping, ...]
+    header_footer: tuple[PageHeaderFooter, ...]
     metadata: Mapping[str, MetadataValue]
     hashes: FileHashes
     tooling: Tooling
@@ -145,7 +154,9 @@ class DocumentNormalizer:
         pdf_path, converter_version = self._pdf_path(original_path, source_type, source_id)
 
         inspection = self._inspect_pdf(pdf_path, source_id)
-        markdown, page_map, normalization_warnings = self._normalize_pdf(pdf_path, source_id)
+        markdown, page_map, header_footer, normalization_warnings = self._normalize_pdf(
+            pdf_path, source_id
+        )
         normalized_path = self._write_markdown(markdown, source_id)
         assets = self._collect_assets(source_id)
 
@@ -159,6 +170,7 @@ class DocumentNormalizer:
             embedded_files=inspection.embedded_files,
             links=inspection.links,
             page_map=page_map,
+            header_footer=header_footer,
             metadata=inspection.metadata,
             hashes=FileHashes(
                 source_sha256=source_hash,
@@ -272,7 +284,7 @@ class DocumentNormalizer:
                 check=True,
                 capture_output=True,
                 text=True,
-                timeout=_CONVERSION_TIMEOUT_SECONDS,
+                timeout=_VERSION_PROBE_TIMEOUT_SECONDS,
             )
         except (OSError, subprocess.SubprocessError) as error:
             raise DocumentConversionError(
@@ -385,30 +397,17 @@ class DocumentNormalizer:
         self,
         pdf_path: Path,
         source_id: str,
-    ) -> tuple[str, tuple[PageMapping, ...], tuple[str, ...]]:
+    ) -> tuple[str, tuple[PageMapping, ...], tuple[PageHeaderFooter, ...], tuple[str, ...]]:
         assets_dir = self._assets_dir(source_id)
         _reset_dir(assets_dir)
-        warnings: tuple[str, ...] = ()
 
         # PyMuPDF4LLM mangles spaces in image paths; extract through a safe temporary path.
         try:
             with tempfile.TemporaryDirectory(prefix="document_images_") as temporary_dir:
                 temporary_path = Path(temporary_dir)
-                chunks = self._parse_pdf(pdf_path, temporary_path, include_headers=False)
-                markdown, page_map = _join_pages(chunks)
-
-                if not markdown:
-                    _reset_dir(temporary_path)
-                    retry_chunks = self._parse_pdf(
-                        pdf_path,
-                        temporary_path,
-                        include_headers=True,
-                    )
-                    retry_markdown, retry_page_map = _join_pages(retry_chunks)
-                    if retry_markdown:
-                        markdown = retry_markdown
-                        page_map = retry_page_map
-                        warnings = (_HEADER_FOOTER_WARNING,)
+                chunks = self._parse_pdf(pdf_path, temporary_path)
+                page_bodies, header_footer, warnings = _extract_pages(chunks)
+                markdown, page_map = _join_pages(page_bodies)
 
                 for image_path in temporary_path.iterdir():
                     if image_path.is_file():
@@ -420,15 +419,12 @@ class DocumentNormalizer:
         asset_reference = _relative_to_dir(assets_dir, normalized_dir)
         markdown = _rewrite_asset_paths(markdown, temporary_path, asset_reference)
 
-        return markdown, page_map, warnings
+        return markdown, page_map, header_footer, warnings
 
-    def _parse_pdf(
-        self,
-        pdf_path: Path,
-        image_path: Path,
-        *,
-        include_headers: bool,
-    ) -> list[Mapping[str, object]]:
+    def _parse_pdf(self, pdf_path: Path, image_path: Path) -> list[Mapping[str, object]]:
+        # header=True/footer=True keeps header/footer text addressable via
+        # page_boxes so it can be captured, instead of discarding it outright;
+        # _extract_pages strips it back out of the body afterward.
         raw_chunks = pymupdf4llm.to_markdown(
             str(pdf_path),
             write_images=True,
@@ -437,8 +433,8 @@ class DocumentNormalizer:
             use_ocr=True,
             force_ocr=False,
             ocr_dpi=300,
-            header=include_headers,
-            footer=include_headers,
+            header=True,
+            footer=True,
             page_chunks=True,
             filename="document",
             image_path=str(image_path),
@@ -519,18 +515,81 @@ class DocumentNormalizer:
         return self._root / "normalized" / source_id
 
 
-def _join_pages(
+def _extract_pages(
     chunks: list[Mapping[str, object]],
-) -> tuple[str, tuple[PageMapping, ...]]:
-    lines: list[str] = []
-    page_map: list[PageMapping] = []
+) -> tuple[list[str], tuple[PageHeaderFooter, ...], tuple[str, ...]]:
+    bodies: list[str] = []
+    header_footer: list[PageHeaderFooter] = []
+    warnings: list[str] = []
 
     for page_number, chunk in enumerate(chunks, start=1):
         text = chunk.get("text")
         if not isinstance(text, str):
             raise DocumentParseError(f"Page {page_number} has no Markdown text")
 
-        page_lines = text.rstrip("\n").splitlines() if text else []
+        boxes = chunk.get("page_boxes")
+        boxes = boxes if isinstance(boxes, list) else []
+
+        header = _box_text(text, boxes, "page-header")
+        footer = _box_text(text, boxes, "page-footer")
+        body = _strip_boxes(text, boxes, _HEADER_FOOTER_CLASSES)
+
+        if not body.strip() and text.strip():
+            # Layout misclassified the page's only content as header/footer;
+            # keep it in the body rather than silently discarding the page.
+            body = text
+            warnings.append(
+                f"Page {page_number} classified entirely as header/footer; "
+                "original text kept in body"
+            )
+
+        bodies.append(body)
+        if header or footer:
+            header_footer.append(PageHeaderFooter(page_number, header, footer))
+
+    return bodies, tuple(header_footer), tuple(warnings)
+
+
+def _box_text(text: str, boxes: list[object], box_class: str) -> str | None:
+    pieces = [
+        text[start:stop].strip() for start, stop in _box_ranges(boxes, frozenset({box_class}))
+    ]
+    pieces = [piece for piece in pieces if piece]
+
+    return " ".join(pieces) if pieces else None
+
+
+def _strip_boxes(text: str, boxes: list[object], classes: frozenset[str]) -> str:
+    for start, stop in sorted(_box_ranges(boxes, classes), reverse=True):
+        text = text[:start] + text[stop:]
+
+    return text
+
+
+def _box_ranges(boxes: list[object], classes: frozenset[str]) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+
+    for box in boxes:
+        if not isinstance(box, dict) or box.get("class") not in classes:
+            continue
+
+        pos = box.get("pos")
+        if not (isinstance(pos, (tuple, list)) and len(pos) == 2):
+            continue
+
+        start, stop = pos
+        if isinstance(start, int) and isinstance(stop, int) and stop > start:
+            ranges.append((start, stop))
+
+    return ranges
+
+
+def _join_pages(page_bodies: list[str]) -> tuple[str, tuple[PageMapping, ...]]:
+    lines: list[str] = []
+    page_map: list[PageMapping] = []
+
+    for page_number, body in enumerate(page_bodies, start=1):
+        page_lines = body.rstrip("\n").splitlines() if body else []
         if page_lines:
             start_line = len(lines) + 1
             lines.extend(page_lines)
@@ -546,7 +605,7 @@ def _join_pages(
                 end_line=end_line,
             )
         )
-        if page_number < len(chunks) and lines and lines[-1] != "":
+        if page_number < len(page_bodies) and lines and lines[-1] != "":
             lines.append("")
 
     markdown = "\n".join(lines).rstrip()

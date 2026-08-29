@@ -9,6 +9,7 @@ from report_writing_collaborator import (
     DocumentNormalizer,
     FileHashes,
     NormalizedDocument,
+    PageHeaderFooter,
     PageMapping,
     SourceSpec,
     StructureIndexer,
@@ -33,6 +34,7 @@ def _normalized_document(
     source_id: str = "src_test00000000",
     normalized_path: str,
     page_map: tuple[PageMapping, ...] = (),
+    header_footer: tuple[PageHeaderFooter, ...] = (),
 ) -> NormalizedDocument:
     return NormalizedDocument(
         source_id=source_id,
@@ -44,6 +46,7 @@ def _normalized_document(
         embedded_files=(),
         links=(),
         page_map=page_map,
+        header_footer=header_footer,
         metadata={},
         hashes=FileHashes(source_sha256="0" * 64, normalized_sha256="0" * 64),
         tooling=Tooling(
@@ -92,6 +95,24 @@ def test_duplicate_sibling_titles_get_distinct_ids(tmp_path: Path) -> None:
     # Determinism: re-indexing the same content yields identical IDs.
     again = StructureIndexer(tmp_path).index_structure(document)
     assert [s.section_id for s in structure.sections] == [s.section_id for s in again.sections]
+
+
+def test_identical_headings_across_sources_get_distinct_ids(tmp_path: Path) -> None:
+    text = "# Test System\n## Observations\nsame text\n"
+    path_x = _write_markdown(tmp_path, "src_x", text)
+    path_y = _write_markdown(tmp_path, "src_y", text)
+    indexer = StructureIndexer(tmp_path)
+
+    structure_x = indexer.index_structure(
+        _normalized_document(source_id="src_x", normalized_path=path_x)
+    )
+    structure_y = indexer.index_structure(
+        _normalized_document(source_id="src_y", normalized_path=path_y)
+    )
+
+    ids_x = {s.section_id for s in structure_x.sections}
+    ids_y = {s.section_id for s in structure_y.sections}
+    assert ids_x.isdisjoint(ids_y)
 
 
 def test_bold_and_plain_titles_share_identity_space(tmp_path: Path) -> None:

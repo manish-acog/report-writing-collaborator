@@ -177,6 +177,33 @@ def test_named_destination_link_is_internal(tmp_path: Path) -> None:
     assert result.warnings == ()
 
 
+def test_running_footer_is_captured_and_stripped_from_body(tmp_path: Path) -> None:
+    source = tmp_path / "footered.pdf"
+    document = pymupdf.open()
+    for page_index in range(3):
+        page = document.new_page()
+        page.insert_textbox(
+            pymupdf.Rect(72, 150, 500, 600),
+            f"Body content for page {page_index + 1}.",
+            fontsize=12,
+        )
+        # A small, fixed-position line near the bottom of every page is what
+        # PyMuPDF4LLM's layout model classifies as a running footer.
+        page.insert_text((280, 770), f"Page {page_index + 1}", fontsize=8)
+    document.save(source)
+    document.close()
+
+    result = DocumentNormalizer(tmp_path / "staging").normalize_document(
+        SourceSpec(source, "source_01")
+    )
+
+    assert [entry.footer for entry in result.header_footer] == ["Page 1", "Page 2", "Page 3"]
+    assert all(entry.header is None for entry in result.header_footer)
+    body = (tmp_path / "staging" / result.normalized_path).read_text(encoding="utf-8")
+    assert "Page 1" not in body
+    assert "Body content for page 1." in body
+
+
 def test_sparse_pdf_text_is_not_discarded(tmp_path: Path) -> None:
     source = tmp_path / "sparse.pdf"
     document = pymupdf.open()
@@ -189,7 +216,9 @@ def test_sparse_pdf_text_is_not_discarded(tmp_path: Path) -> None:
     result = DocumentNormalizer(staging).normalize_document(SourceSpec(source, "source_01"))
 
     assert "Sparse document body" in (staging / result.normalized_path).read_text(encoding="utf-8")
-    assert result.warnings == ("Header/footer filtering removed all text; content preserved",)
+    assert result.warnings == (
+        "Page 1 classified entirely as header/footer; original text kept in body",
+    )
 
 
 def test_office_source_uses_pinned_libreoffice(tmp_path: Path) -> None:

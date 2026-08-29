@@ -78,7 +78,7 @@ class StructureIndexer:
         markdown_path = self._workspace_path(document.normalized_path)
         lines = self._read_lines(markdown_path)
         headings, scan_warnings = _scan_headings(lines)
-        sections = _build_sections(headings, len(lines), document.page_map)
+        sections = _build_sections(document.source_id, headings, len(lines), document.page_map)
 
         structure = DocumentStructure(
             source_id=document.source_id,
@@ -181,6 +181,7 @@ def _normalize_title(title: str) -> str:
 
 
 def _build_sections(
+    source_id: str,
     headings: list[_Heading],
     total_lines: int,
     page_map: tuple[PageMapping, ...],
@@ -210,6 +211,7 @@ def _build_sections(
         sibling_occurrences[occurrence_key] = occurrence
 
         identity = (
+            source_id,
             *(_normalize_title(ancestor) for ancestor in parent_path),
             normalized_title,
             f"occurrence_{occurrence}",

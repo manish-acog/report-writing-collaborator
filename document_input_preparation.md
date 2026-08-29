@@ -115,6 +115,7 @@ Required fields:
   "embedded_files": [],
   "links": [],
   "page_map": [],
+  "header_footer": [],
   "metadata": {},
   "hashes": {
     "source_sha256": "...",
