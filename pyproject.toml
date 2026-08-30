@@ -7,6 +7,7 @@ dependencies = [
     "benchling-sdk==1.25.0",
     "google-adk==2.7.1",
     "litellm==1.98.0",
+    "pydantic==2.13.4",
     "pymupdf==1.28.2",
     "pymupdf4llm==1.28.2",
 ]

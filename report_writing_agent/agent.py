@@ -24,8 +24,8 @@ from google.adk.tools.skill_toolset import SkillToolset
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-_SKILLS_DIR = Path(__file__).parent / "skills"
-_DEFAULT_MODEL = "anthropic/claude-sonnet-5"
+SKILLS_DIR = Path(__file__).parent / "skills"
+DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 _MAX_GREP_MATCHES = 200
 _VISION_MODEL_ENV_VAR = "REPORT_AGENT_VISION_MODEL"
 _VISION_TIMEOUT_SECONDS = 60
@@ -57,7 +57,7 @@ def _within_root(path: Path, root: Path) -> bool:
 
 def make_workspace_tools(
     workspace_root: Path,
-    agent_model: str = _DEFAULT_MODEL,
+    agent_model: str = DEFAULT_MODEL,
 ) -> list[Callable[..., dict]]:
     """Builds glob/grep/read/inspect tools bound to one read-only workspace.
 
@@ -234,14 +234,14 @@ def build_agent(
     Returns:
         A configured LlmAgent, not yet run.
     """
-    available = sorted(path for path in _SKILLS_DIR.iterdir() if path.is_dir())
+    available = sorted(path for path in SKILLS_DIR.iterdir() if path.is_dir())
     if skill_names is None:
         selected = available
     else:
         by_name = {path.name: path for path in available}
         selected = [by_name[name] for name in skill_names]
 
-    model = model or os.environ.get("REPORT_AGENT_MODEL", _DEFAULT_MODEL)
+    model = model or os.environ.get("REPORT_AGENT_MODEL", DEFAULT_MODEL)
     skills = [load_skill_from_dir(skill_dir) for skill_dir in selected]
     tools: list[object] = [
         *make_workspace_tools(workspace_root, agent_model=model),

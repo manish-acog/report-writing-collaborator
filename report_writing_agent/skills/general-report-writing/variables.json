@@ -1,0 +1,29 @@
+{
+  "call_groups": [
+    {
+      "name": "report_fields",
+      "variables": [
+        {
+          "name": "title",
+          "variable_type": "text",
+          "description": "A short, specific title for this report, drawn from what the workspace's sources are actually about."
+        },
+        {
+          "name": "executive_summary",
+          "variable_type": "text",
+          "description": "A brief, high-level summary of the workspace's contents and purpose, written for a reader who won't read the rest of the report."
+        },
+        {
+          "name": "key_findings",
+          "variable_type": "text",
+          "description": "The most important, evidence-backed findings across the workspace's sources, as a short list or short paragraphs."
+        },
+        {
+          "name": "conclusion",
+          "variable_type": "text",
+          "description": "An overall conclusion synthesizing the key findings, without introducing any claim the findings didn't already establish."
+        }
+      ]
+    }
+  ]
+}

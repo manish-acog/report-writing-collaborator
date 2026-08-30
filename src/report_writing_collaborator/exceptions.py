@@ -36,3 +36,11 @@ class ElnFetchError(ElnNormalizationError):
 
 class ElnParseError(ElnNormalizationError):
     """Raised when a fetched entry cannot be rendered to Markdown."""
+
+
+class VariableConfigError(Exception):
+    """Raised when a skill's variables.json is missing or invalid."""
+
+
+class ReportRenderError(Exception):
+    """Raised when a completed value map cannot be rendered against a template."""

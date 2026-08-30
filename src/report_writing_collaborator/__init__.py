@@ -1,5 +1,7 @@
 __all__ = [
     "Asset",
+    "CallGroup",
+    "Citation",
     "DocumentConversionError",
     "DocumentLink",
     "DocumentNormalizationError",
@@ -21,6 +23,7 @@ __all__ = [
     "NormalizedDocument",
     "PageHeaderFooter",
     "PageMapping",
+    "ReportRenderError",
     "Section",
     "SourceSpec",
     "StructureHashes",
@@ -28,10 +31,16 @@ __all__ = [
     "StructureIndexingError",
     "Tooling",
     "UnsupportedDocumentTypeError",
+    "VariableConfigError",
+    "VariableDef",
+    "VariablesConfig",
     "WorkspaceBuildError",
     "WorkspaceConfig",
     "WorkspaceManifest",
+    "build_output_schema",
     "build_workspace",
+    "load_variables_config",
+    "render",
 ]
 
 from report_writing_collaborator.document_normalizer import (
@@ -55,16 +64,27 @@ from report_writing_collaborator.exceptions import (
     ElnFetchError,
     ElnNormalizationError,
     ElnParseError,
+    ReportRenderError,
     StructureIndexingError,
     UnsupportedDocumentTypeError,
+    VariableConfigError,
     WorkspaceBuildError,
 )
+from report_writing_collaborator.report_renderer import render
 from report_writing_collaborator.structure_indexer import (
     DocumentStructure,
     IndexerTooling,
     Section,
     StructureHashes,
     StructureIndexer,
+)
+from report_writing_collaborator.variable_config import (
+    CallGroup,
+    Citation,
+    VariableDef,
+    VariablesConfig,
+    build_output_schema,
+    load_variables_config,
 )
 from report_writing_collaborator.workspace_builder import (
     FileSource,
