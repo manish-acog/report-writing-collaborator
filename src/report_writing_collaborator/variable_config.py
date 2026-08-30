@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -149,6 +149,12 @@ def _field_type(variable: VariableDef) -> object:
         status=(Literal["not_found"], ...),
         __config__=ConfigDict(extra="forbid"),
     )
+    # Deliberately not a discriminated union: Pydantic renders
+    # Field(discriminator=...) as JSON Schema `oneOf` (plus a `discriminator`
+    # keyword), which Azure OpenAI's structured-output strict schema
+    # validation rejects ("'oneOf' is not permitted"). A plain union renders
+    # as `anyOf`, which is supported, and validates identically here since
+    # each branch's literal `status` value still disambiguates it.
     # found/not_found are runtime-built classes, not statically known types;
-    # ty cannot type-check a discriminated Union built from them.
-    return Annotated[found | not_found, Field(discriminator="status")]  # ty: ignore[invalid-type-form]
+    # ty cannot type-check a Union built from them.
+    return found | not_found  # ty: ignore[invalid-type-form]
