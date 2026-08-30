@@ -39,6 +39,15 @@ _PDF_TYPES = frozenset({"pdf"})
 _OFFICE_TYPES = frozenset({"doc", "docx", "ppt", "pptx"})
 _SUPPORTED_TYPES = _PDF_TYPES | _OFFICE_TYPES
 
+
+def make_source_id(source_sha256: str) -> str:
+    return f"{_SOURCE_PREFIX}{source_sha256[:_SOURCE_ID_LENGTH]}"
+
+
+def supports_document(path: str | Path) -> bool:
+    return Path(path).suffix.lower().removeprefix(".") in _SUPPORTED_TYPES
+
+
 MetadataValue = str | int | float | bool | None
 
 
@@ -149,7 +158,7 @@ class DocumentNormalizer:
         self._check_type(source_type)
 
         source_hash = _sha256(source_path)
-        source_id = f"{_SOURCE_PREFIX}{source_hash[:_SOURCE_ID_LENGTH]}"
+        source_id = make_source_id(source_hash)
         original_path = self._copy_source(source_path, source_id, source_hash)
         pdf_path, converter_version = self._pdf_path(original_path, source_type, source_id)
 

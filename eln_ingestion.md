@@ -152,9 +152,6 @@ the source union, one more branch at the dispatch point.
   built for it now.
 - **Day-based page-mapping analogue** — not needed until something
   actually cites by day.
-- **Recursive normalization of ELN external files as child sources** —
-  same deferred policy as embedded PDF files in
-  `document_input_preparation.md`.
 
 ## Open questions
 

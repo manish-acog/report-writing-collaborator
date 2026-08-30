@@ -477,12 +477,10 @@ extract
 → record in manifest/provenance
 ```
 
-Whether embedded files are recursively normalized is workflow/composition
-policy. A recursively normalized embedded file becomes a child source in
-the same workspace: it gets its own `source_id`, runs the normal
-`DocumentNormalizer` → `StructureIndexer` path, and appears in
-`manifest.json` `sources[]` with a `parent_source_id` pointing back to
-the source it was embedded in. It does not spawn a separate workspace.
+`WorkspaceBuilder` recursively promotes supported embedded documents to child
+sources in the same workspace. Each child runs the normal
+`DocumentNormalizer` → `StructureIndexer` path and records its immediate
+parent's `source_id`. Images and unsupported files remain source-owned assets.
 
 ### Links
 
@@ -620,7 +618,6 @@ Example:
     }
   ],
   "assets": [],
-  "embedded_files": [],
   "derived_artifacts": []
 }
 ```

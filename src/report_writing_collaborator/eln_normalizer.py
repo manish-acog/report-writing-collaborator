@@ -16,11 +16,12 @@ from benchling_sdk.auth.api_key_auth import ApiKeyAuth
 from benchling_sdk.benchling import Benchling
 
 from report_writing_collaborator.document_normalizer import (
-    Asset,
+    EmbeddedFile,
     FileHashes,
     MetadataValue,
     NormalizedDocument,
     Tooling,
+    make_source_id,
 )
 from report_writing_collaborator.exceptions import (
     ElnAuthenticationError,
@@ -518,28 +519,24 @@ def download_external_files_for_entry(
     api_key: str,
     benchling_url: str,
     output_dir: Path,
-) -> tuple[dict[str, Path], tuple[str, ...]]:
-    """Downloads every external file referenced by an entry.
-
-    Per-file failures are collected as warnings rather than raised, so one
-    bad link doesn't discard an otherwise-normalizable entry.
-    """
+) -> dict[str, Path]:
+    """Download every external file or fail the incomplete entry."""
     entry_id = str(entry.get("id", "")).strip()
     file_ids = _extract_external_file_ids(entry)
-    if not entry_id or not file_ids:
-        return {}, ()
+    if not file_ids:
+        return {}
+    if not entry_id:
+        raise ElnFetchError("Cannot acquire external files without an entry ID")
 
     client = _create_benchling_client(api_key=api_key, benchling_url=benchling_url)
     downloaded: dict[str, Path] = {}
-    warnings: list[str] = []
 
     for file_id in file_ids:
         try:
             meta = client.entries.get_external_file(entry_id, file_id)
             download_url = _extract_download_url(meta)
             if not download_url:
-                warnings.append(f"External file '{file_id}' has no download URL; skipped")
-                continue
+                raise ElnFetchError(f"External file '{file_id}' has no download URL")
 
             filename = _filename_from_meta(meta, file_id, download_url)
             destination = output_dir / filename
@@ -549,10 +546,12 @@ def download_external_files_for_entry(
             # Signed S3 URLs must be fetched directly, without API auth headers.
             _download_file(download_url, destination)
             downloaded[file_id] = destination
+        except ElnFetchError:
+            raise
         except Exception as error:
-            warnings.append(f"Failed to download external file '{file_id}': {error}")
+            raise ElnFetchError(f"Failed to acquire external file '{file_id}': {error}") from error
 
-    return downloaded, tuple(warnings)
+    return downloaded
 
 
 def fetch_external_file_links_for_entry(
@@ -660,7 +659,7 @@ class ElnNormalizer:
         )
         entry_bytes = json.dumps(entry, sort_keys=True, ensure_ascii=False).encode("utf-8")
         entry_hash = _sha256_bytes(entry_bytes)
-        source_id = f"{_SOURCE_PREFIX}{entry_hash[:_SOURCE_ID_LENGTH]}"
+        source_id = make_source_id(entry_hash)
 
         original_path = self._preserve_source(source_id, entry_bytes, entry_hash)
         assets_dir = self._root / "assets" / source_id
@@ -674,7 +673,7 @@ class ElnNormalizer:
             raise ElnFetchError(f"Cannot fetch external file links: {error}") from error
 
         try:
-            downloaded, download_warnings = download_external_files_for_entry(
+            downloaded = download_external_files_for_entry(
                 entry,
                 api_key=self._api_key,
                 benchling_url=self._benchling_url,
@@ -705,8 +704,14 @@ class ElnNormalizer:
                 f"Cannot write normalized Markdown: {markdown_path}"
             ) from error
 
-        assets = tuple(
-            Asset(path=self._relative(path), sha256=_sha256_file(path))
+        embedded_files = tuple(
+            EmbeddedFile(
+                path=self._relative(path),
+                original_name=path.name,
+                description=None,
+                size=path.stat().st_size,
+                sha256=_sha256_file(path),
+            )
             for path in sorted(downloaded.values())
         )
 
@@ -716,8 +721,8 @@ class ElnNormalizer:
             source_type=_SOURCE_TYPE,
             original_path=self._relative(original_path),
             normalized_path=self._relative(markdown_path),
-            assets=assets,
-            embedded_files=(),
+            assets=(),
+            embedded_files=embedded_files,
             links=(),
             page_map=(),
             header_footer=(),
@@ -732,7 +737,7 @@ class ElnNormalizer:
                 converter=None,
                 converter_version=None,
             ),
-            warnings=download_warnings,
+            warnings=(),
         )
         self._validate(result)
 
@@ -766,10 +771,10 @@ class ElnNormalizer:
         ):
             raise ElnNormalizationError("Normalized Markdown failed validation")
 
-        for asset in document.assets:
-            asset_path = self._workspace_path(asset.path)
-            if not asset_path.is_file() or _sha256_file(asset_path) != asset.sha256:
-                raise ElnNormalizationError(f"Artifact failed validation: {asset.path}")
+        for artifact in (*document.assets, *document.embedded_files):
+            artifact_path = self._workspace_path(artifact.path)
+            if not artifact_path.is_file() or _sha256_file(artifact_path) != artifact.sha256:
+                raise ElnNormalizationError(f"Artifact failed validation: {artifact.path}")
 
         if not document.tooling.normalizer_version:
             raise ElnNormalizationError("Normalizer version is missing")

@@ -17,7 +17,6 @@ __all__ = [
     "FileSource",
     "IndexerTooling",
     "ManifestAsset",
-    "ManifestEmbeddedFile",
     "ManifestSource",
     "NormalizedDocument",
     "PageHeaderFooter",
@@ -70,7 +69,6 @@ from report_writing_collaborator.structure_indexer import (
 from report_writing_collaborator.workspace_builder import (
     FileSource,
     ManifestAsset,
-    ManifestEmbeddedFile,
     ManifestSource,
     WorkspaceConfig,
     WorkspaceManifest,

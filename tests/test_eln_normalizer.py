@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -12,7 +12,10 @@ from report_writing_collaborator import (
     ElnNormalizer,
     ElnSource,
 )
-from report_writing_collaborator.eln_normalizer import BenchlingFormatter
+from report_writing_collaborator.eln_normalizer import (
+    BenchlingFormatter,
+    download_external_files_for_entry,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -116,7 +119,7 @@ def test_normalize_entry_produces_normalized_document(tmp_path: Path) -> None:
         ),
         patch(
             "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
-            return_value=({}, ()),
+            return_value={},
         ),
     ):
         normalizer = ElnNormalizer(tmp_path, api_key="key", benchling_url="https://x.benchling.com")
@@ -142,7 +145,7 @@ def test_normalize_entry_produces_normalized_document(tmp_path: Path) -> None:
     assert result.warnings == ()
 
 
-def test_normalize_entry_downloads_and_links_assets(tmp_path: Path) -> None:
+def test_normalize_entry_reports_downloads_as_embedded_files(tmp_path: Path) -> None:
     entry = _sample_entry()
     _append_note(entry, {"type": "image", "imageId": "img_1", "text": "A plot"})
 
@@ -150,7 +153,7 @@ def test_normalize_entry_downloads_and_links_assets(tmp_path: Path) -> None:
         destination = output_dir / "plot.png"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(b"\x89PNG")
-        return {"img_1": destination}, ()
+        return {"img_1": destination}
 
     with (
         patch(
@@ -171,14 +174,14 @@ def test_normalize_entry_downloads_and_links_assets(tmp_path: Path) -> None:
             ElnSource(entry_id="etr_1", source_instance_id="source_01")
         )
 
-    assert len(result.assets) == 1
-    asset = result.assets[0]
-    assert (tmp_path / asset.path).is_file()
+    assert result.assets == ()
+    assert len(result.embedded_files) == 1
+    assert (tmp_path / result.embedded_files[0].path).is_file()
     markdown = (tmp_path / result.normalized_path).read_text(encoding="utf-8")
     assert "![A plot](../../assets/" in markdown
 
 
-def test_normalize_entry_collects_download_failures_as_warnings(tmp_path: Path) -> None:
+def test_normalize_entry_propagates_download_failure(tmp_path: Path) -> None:
     entry = _sample_entry()
 
     with (
@@ -192,15 +195,57 @@ def test_normalize_entry_collects_download_failures_as_warnings(tmp_path: Path) 
         ),
         patch(
             "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
-            return_value=({}, ("Failed to download external file 'ext_1': timeout",)),
+            side_effect=ElnFetchError("Failed to acquire external file 'ext_1'"),
         ),
+        pytest.raises(ElnFetchError, match="ext_1"),
     ):
-        normalizer = ElnNormalizer(tmp_path, api_key="key", benchling_url="https://x.benchling.com")
-        result = normalizer.normalize_entry(
-            ElnSource(entry_id="etr_1", source_instance_id="source_01")
+        normalizer = ElnNormalizer(
+            tmp_path,
+            api_key="key",
+            benchling_url="https://x.benchling.com",
+        )
+        normalizer.normalize_entry(ElnSource(entry_id="etr_1", source_instance_id="source_01"))
+
+
+def test_external_file_download_failure_is_fatal(tmp_path: Path) -> None:
+    entry = _sample_entry()
+    _append_note(
+        entry,
+        {"type": "external_file", "externalFileId": "ext_1", "name": "Evidence"},
+    )
+    client = Mock()
+    client.entries.get_external_file.side_effect = OSError("timeout")
+
+    with (
+        patch(
+            "report_writing_collaborator.eln_normalizer._create_benchling_client",
+            return_value=client,
+        ),
+        pytest.raises(ElnFetchError, match="ext_1"),
+    ):
+        download_external_files_for_entry(
+            entry,
+            api_key="key",
+            benchling_url="https://x.benchling.com",
+            output_dir=tmp_path,
         )
 
-    assert result.warnings == ("Failed to download external file 'ext_1': timeout",)
+
+def test_external_file_requires_entry_id(tmp_path: Path) -> None:
+    entry = _sample_entry()
+    entry.pop("id")
+    _append_note(
+        entry,
+        {"type": "external_file", "externalFileId": "ext_1", "name": "Evidence"},
+    )
+
+    with pytest.raises(ElnFetchError, match="entry ID"):
+        download_external_files_for_entry(
+            entry,
+            api_key="key",
+            benchling_url="https://x.benchling.com",
+            output_dir=tmp_path,
+        )
 
 
 def test_normalize_entry_wraps_fetch_failure(tmp_path: Path) -> None:
@@ -239,7 +284,7 @@ def test_two_entries_get_distinct_source_ids(tmp_path: Path) -> None:
         ),
         patch(
             "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
-            return_value=({}, ()),
+            return_value={},
         ),
     ):
         normalizer = ElnNormalizer(tmp_path, api_key="key", benchling_url="https://x.benchling.com")

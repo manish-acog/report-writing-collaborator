@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import os
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from report_writing_collaborator.document_normalizer import DocumentNormalizer, SourceSpec
+from report_writing_collaborator.document_normalizer import (
+    DocumentNormalizer,
+    SourceSpec,
+    make_source_id,
+    supports_document,
+)
 from report_writing_collaborator.eln_normalizer import ElnNormalizer, ElnSource
 from report_writing_collaborator.exceptions import WorkspaceBuildError
 from report_writing_collaborator.structure_indexer import StructureIndexer
@@ -17,6 +24,7 @@ if TYPE_CHECKING:
 
     from _typeshed import DataclassInstance
 
+    from report_writing_collaborator.document_normalizer import NormalizedDocument
     from report_writing_collaborator.structure_indexer import DocumentStructure
 
 _MANIFEST_NAME = "manifest.json"
@@ -24,6 +32,9 @@ _SECTIONS_NAME = "document.sections.json"
 _STAGING_PREFIX = ".staging-"
 _PUBLISHED_STATE = "published"
 _WORKSPACE_ID_PREFIX = "ws_"
+_ATTACHMENT_INSTANCE_PREFIX = "attachment_"
+_ATTACHMENT_INSTANCE_LENGTH = 12
+_HASH_CHUNK_SIZE = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,14 +75,6 @@ class ManifestAsset:
 
 
 @dataclass(frozen=True, slots=True)
-class ManifestEmbeddedFile:
-    source_id: str
-    path: str
-    original_name: str
-    sha256: str
-
-
-@dataclass(frozen=True, slots=True)
 class WorkspaceManifest:
     workspace_id: str
     workspace_version: int
@@ -79,8 +82,14 @@ class WorkspaceManifest:
     workspace_state: str
     sources: tuple[ManifestSource, ...]
     assets: tuple[ManifestAsset, ...]
-    embedded_files: tuple[ManifestEmbeddedFile, ...]
     derived_artifacts: tuple[dict[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingSource:
+    source: FileSource | ElnSource
+    known_source_id: str | None = None
+    ancestor_source_ids: frozenset[str] = frozenset()
 
 
 def build_workspace(
@@ -146,21 +155,55 @@ def _build_in_staging(
     )
     indexer = StructureIndexer(staging_dir)
 
+    repeated_file_ids = _repeated_file_ids(sources)
+    pending = deque(
+        _PendingSource(
+            source,
+            known_source_id=repeated_file_ids.get(source.source_instance_id),
+        )
+        for source in sources
+    )
+    normalized_by_id: dict[str, NormalizedDocument] = {}
+    eln_source_ids: dict[str, str] = {}
+    sections_by_id: dict[str, str] = {}
+    source_instance_ids = {source.source_instance_id for source in sources}
     manifest_sources: list[ManifestSource] = []
     manifest_assets: list[ManifestAsset] = []
-    manifest_embedded_files: list[ManifestEmbeddedFile] = []
+    asset_keys: set[tuple[str, str]] = set()
 
-    for source in sources:
-        if isinstance(source, FileSource):
-            normalized = normalizer.normalize_document(
-                SourceSpec(path=source.path, source_instance_id=source.source_instance_id)
-            )
-        else:
-            normalized = eln_normalizer.normalize_entry(source)
+    while pending:
+        item = pending.popleft()
+        source = item.source
+        known_source_id = item.known_source_id
+        if known_source_id is None and isinstance(source, ElnSource):
+            known_source_id = eln_source_ids.get(source.entry_id)
+        normalized = normalized_by_id.get(known_source_id) if known_source_id else None
 
-        structure = indexer.index_structure(normalized)
-        sections_path = _write_sections(staging_dir, normalized.source_id, structure)
+        if normalized is None:
+            if isinstance(source, FileSource):
+                normalized = normalizer.normalize_document(
+                    SourceSpec(path=source.path, source_instance_id=source.source_instance_id)
+                )
+            else:
+                normalized = eln_normalizer.normalize_entry(source)
+                eln_source_ids[source.entry_id] = normalized.source_id
 
+            existing = normalized_by_id.get(normalized.source_id)
+            if existing is None:
+                normalized_by_id[normalized.source_id] = normalized
+                structure = indexer.index_structure(normalized)
+                sections_by_id[normalized.source_id] = _write_sections(
+                    staging_dir,
+                    normalized.source_id,
+                    structure,
+                )
+            else:
+                normalized = existing
+
+        normalized = dataclasses.replace(
+            normalized,
+            source_instance_id=source.source_instance_id,
+        )
         manifest_sources.append(
             ManifestSource(
                 source_id=normalized.source_id,
@@ -169,23 +212,56 @@ def _build_in_staging(
                 source_type=normalized.source_type,
                 original_path=normalized.original_path,
                 normalized_path=normalized.normalized_path,
-                sections_path=sections_path,
+                sections_path=sections_by_id[normalized.source_id],
                 parent_source_id=source.parent_source_id,
             )
         )
-        manifest_assets.extend(
-            ManifestAsset(source_id=normalized.source_id, path=asset.path, sha256=asset.sha256)
-            for asset in normalized.assets
-        )
-        manifest_embedded_files.extend(
-            ManifestEmbeddedFile(
+
+        for asset in normalized.assets:
+            _add_asset(
+                manifest_assets,
+                asset_keys,
                 source_id=normalized.source_id,
-                path=embedded_file.path,
-                original_name=embedded_file.original_name,
-                sha256=embedded_file.sha256,
+                path=asset.path,
+                sha256=asset.sha256,
             )
-            for embedded_file in normalized.embedded_files
-        )
+
+        # Record the repeated occurrence, but stop a recursive content cycle.
+        if normalized.source_id in item.ancestor_source_ids:
+            continue
+
+        child_ancestors = item.ancestor_source_ids | {normalized.source_id}
+        for attachment in sorted(normalized.embedded_files, key=lambda value: value.path):
+            if not supports_document(attachment.original_name):
+                _add_asset(
+                    manifest_assets,
+                    asset_keys,
+                    source_id=normalized.source_id,
+                    path=attachment.path,
+                    sha256=attachment.sha256,
+                )
+                continue
+
+            source_instance_id = _attachment_instance_id(
+                source.source_instance_id,
+                attachment.path,
+            )
+            if source_instance_id in source_instance_ids:
+                raise WorkspaceBuildError(
+                    f"Duplicate derived source_instance_id: {source_instance_id}"
+                )
+            source_instance_ids.add(source_instance_id)
+            pending.append(
+                _PendingSource(
+                    source=FileSource(
+                        path=staging_dir / attachment.path,
+                        source_instance_id=source_instance_id,
+                        parent_source_id=normalized.source_id,
+                    ),
+                    known_source_id=make_source_id(attachment.sha256),
+                    ancestor_source_ids=child_ancestors,
+                )
+            )
 
     manifest = WorkspaceManifest(
         workspace_id=workspace_id,
@@ -194,13 +270,60 @@ def _build_in_staging(
         workspace_state=_PUBLISHED_STATE,
         sources=tuple(manifest_sources),
         assets=tuple(manifest_assets),
-        embedded_files=tuple(manifest_embedded_files),
         derived_artifacts=(),
     )
     _write_manifest(staging_dir, manifest)
     _validate_manifest(staging_dir, manifest)
 
     return manifest
+
+
+def _attachment_instance_id(parent_instance_id: str, attachment_path: str) -> str:
+    identity = f"{parent_instance_id}\0{attachment_path}".encode()
+    digest = hashlib.sha256(identity).hexdigest()
+    return f"{_ATTACHMENT_INSTANCE_PREFIX}{digest[:_ATTACHMENT_INSTANCE_LENGTH]}"
+
+
+def _add_asset(
+    assets: list[ManifestAsset],
+    keys: set[tuple[str, str]],
+    *,
+    source_id: str,
+    path: str,
+    sha256: str,
+) -> None:
+    key = (source_id, path)
+    if key in keys:
+        return
+
+    keys.add(key)
+    assets.append(ManifestAsset(source_id=source_id, path=path, sha256=sha256))
+
+
+def _repeated_file_ids(sources: list[FileSource | ElnSource]) -> dict[str, str]:
+    sources_by_size: dict[int, list[FileSource]] = {}
+    for source in sources:
+        if not isinstance(source, FileSource) or not source.path.is_file():
+            continue
+
+        size = source.path.stat().st_size
+        sources_by_size.setdefault(size, []).append(source)
+
+    return {
+        source.source_instance_id: make_source_id(_file_sha256(source.path))
+        for same_size_sources in sources_by_size.values()
+        if len(same_size_sources) > 1
+        for source in same_size_sources
+    }
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source_file:
+        for chunk in iter(lambda: source_file.read(_HASH_CHUNK_SIZE), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
 
 
 def _check_unique_instance_ids(sources: list[FileSource | ElnSource]) -> None:
@@ -294,17 +417,26 @@ def _write_json(path: Path, data: DataclassInstance, error_message: str) -> None
 
 
 def _validate_manifest(staging_dir: Path, manifest: WorkspaceManifest) -> None:
+    source_ids = {source.source_id for source in manifest.sources}
+    source_instance_ids = [source.source_instance_id for source in manifest.sources]
+    if len(source_instance_ids) != len(set(source_instance_ids)):
+        raise WorkspaceBuildError("Manifest contains duplicate source_instance_id values")
+
+    for source in manifest.sources:
+        if source.parent_source_id is not None and source.parent_source_id not in source_ids:
+            raise WorkspaceBuildError(
+                f"Manifest source references missing parent: {source.parent_source_id}"
+            )
+
     for source in manifest.sources:
         for relative_path in (source.original_path, source.normalized_path, source.sections_path):
             if not (staging_dir / relative_path).is_file():
                 raise WorkspaceBuildError(f"Manifest references missing file: {relative_path}")
 
     for asset in manifest.assets:
+        if asset.source_id not in source_ids:
+            raise WorkspaceBuildError(
+                f"Manifest asset references missing source: {asset.source_id}"
+            )
         if not (staging_dir / asset.path).is_file():
             raise WorkspaceBuildError(f"Manifest references missing asset: {asset.path}")
-
-    for embedded_file in manifest.embedded_files:
-        if not (staging_dir / embedded_file.path).is_file():
-            raise WorkspaceBuildError(
-                f"Manifest references missing embedded file: {embedded_file.path}"
-            )
