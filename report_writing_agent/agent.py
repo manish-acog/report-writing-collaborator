@@ -1,18 +1,21 @@
 """ADK wiring for the report-writing agent.
 
 Reads a published, read-only document workspace (built by
-report_writing_collaborator.WorkspaceBuilder) through three plain-function
+report_writing_collaborator.WorkspaceBuilder) through four plain-function
 tools, guided by whatever skill(s) are registered. See
-agent_execution_over_adk.md for the design this implements.
+agent_execution_over_adk.md and inspect_image.md for the design this
+implements.
 """
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import litellm
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.skills import load_skill_from_dir
@@ -24,12 +27,26 @@ if TYPE_CHECKING:
 _SKILLS_DIR = Path(__file__).parent / "skills"
 _DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 _MAX_GREP_MATCHES = 200
+_VISION_MODEL_ENV_VAR = "REPORT_AGENT_VISION_MODEL"
+_VISION_TIMEOUT_SECONDS = 60
+_DEFAULT_IMAGE_QUESTION = "Describe this image, including any text, data, or diagrams it contains."
+# Vision APIs (Anthropic, OpenAI, Azure OpenAI) accept a narrower set of
+# image formats than assets carry in general; unlike ElnNormalizer's broader
+# asset-detection list, this is what's safe to actually send to a model.
+_VISION_IMAGE_TYPES = {
+    ".png": "png",
+    ".jpg": "jpeg",
+    ".jpeg": "jpeg",
+    ".gif": "gif",
+    ".webp": "webp",
+}
 _AGENT_INSTRUCTION = (
     "You help produce evidence-grounded output from a published, read-only "
     "document workspace. Use glob_workspace and grep_workspace to find "
     "relevant content, and read_workspace_file to pull exact text before "
-    "making any claim. Load a skill with load_skill and follow its "
-    "instructions exactly."
+    "making any claim. Use inspect_image to ask a vision model about a "
+    "chart, figure, or scanned page. Load a skill with load_skill and "
+    "follow its instructions exactly."
 )
 
 
@@ -38,14 +55,23 @@ def _within_root(path: Path, root: Path) -> bool:
     return resolved == root or root in resolved.parents
 
 
-def make_workspace_tools(workspace_root: Path) -> list[Callable[..., dict]]:
-    """Builds glob/grep/read tools bound to one read-only workspace directory.
+def make_workspace_tools(
+    workspace_root: Path,
+    agent_model: str = _DEFAULT_MODEL,
+) -> list[Callable[..., dict]]:
+    """Builds glob/grep/read/inspect tools bound to one read-only workspace.
 
-    All three tools are confined to workspace_root: matches or reads that
+    All four tools are confined to workspace_root: matches or reads that
     would resolve outside it (e.g. via a ".." segment) are rejected or
     silently excluded rather than followed.
+
+    Args:
+        workspace_root: The published workspace directory to read from.
+        agent_model: The LiteLLM model string inspect_image falls back to
+            when REPORT_AGENT_VISION_MODEL is unset.
     """
     workspace_root = workspace_root.resolve()
+    vision_model = os.environ.get(_VISION_MODEL_ENV_VAR) or agent_model
 
     def glob_workspace(pattern: str) -> dict:
         """Lists workspace files matching a glob pattern.
@@ -125,7 +151,69 @@ def make_workspace_tools(workspace_root: Path) -> list[Callable[..., dict]]:
 
         return {"status": "success", "content": content}
 
-    return [glob_workspace, grep_workspace, read_workspace_file]
+    def inspect_image(path: str, question: str | None = None) -> dict:
+        """Asks a vision-capable model about one workspace image asset.
+
+        Args:
+            path: A workspace-relative image path, e.g.
+                "assets/src_x/fig2.png".
+            question: What to ask about the image. Defaults to a neutral
+                description when omitted.
+
+        Returns:
+            A dict with "status", "description", and "model" on success, or
+            "status": "error" and "error_message" if the path escapes the
+            workspace, is missing, has an unsupported format, or the model
+            call fails.
+        """
+        resolved = (workspace_root / path).resolve()
+        if not _within_root(resolved, workspace_root):
+            return {"status": "error", "error_message": f"Path escapes workspace: {path}"}
+        if not resolved.is_file():
+            return {"status": "error", "error_message": f"Not a file: {path}"}
+
+        image_type = _VISION_IMAGE_TYPES.get(resolved.suffix.lower())
+        if image_type is None:
+            supported = ", ".join(sorted(_VISION_IMAGE_TYPES))
+            return {
+                "status": "error",
+                "error_message": (
+                    f"Unsupported image format '{resolved.suffix}'; expected: {supported}"
+                ),
+            }
+
+        try:
+            encoded = base64.b64encode(resolved.read_bytes()).decode("ascii")
+        except OSError as error:
+            return {"status": "error", "error_message": f"Cannot read {path}: {error}"}
+
+        try:
+            response = litellm.completion(
+                model=vision_model,
+                timeout=_VISION_TIMEOUT_SECONDS,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": question or _DEFAULT_IMAGE_QUESTION},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/{image_type};base64,{encoded}"},
+                            },
+                        ],
+                    }
+                ],
+            )
+        except Exception as error:
+            return {"status": "error", "error_message": f"Vision model call failed: {error}"}
+
+        return {
+            "status": "success",
+            "description": response.choices[0].message.content,
+            "model": vision_model,
+        }
+
+    return [glob_workspace, grep_workspace, read_workspace_file, inspect_image]
 
 
 def build_agent(
@@ -153,11 +241,15 @@ def build_agent(
         by_name = {path.name: path for path in available}
         selected = [by_name[name] for name in skill_names]
 
+    model = model or os.environ.get("REPORT_AGENT_MODEL", _DEFAULT_MODEL)
     skills = [load_skill_from_dir(skill_dir) for skill_dir in selected]
-    tools: list[object] = [*make_workspace_tools(workspace_root), SkillToolset(skills=skills)]
+    tools: list[object] = [
+        *make_workspace_tools(workspace_root, agent_model=model),
+        SkillToolset(skills=skills),
+    ]
 
     return LlmAgent(
-        model=LiteLlm(model=model or os.environ.get("REPORT_AGENT_MODEL", _DEFAULT_MODEL)),
+        model=LiteLlm(model=model),
         name="report_writing_agent",
         description=(
             "Reads a published document workspace and produces evidence-grounded "
