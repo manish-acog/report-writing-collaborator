@@ -1,0 +1,727 @@
+{
+  "version": "study-variables/v1",
+  "study_category": "in_vivo",
+  "variables": [
+    {
+      "variable_name": "study_title",
+      "variable_type": "text",
+      "source": [
+        "cayuse"
+      ],
+      "label": "Study Title",
+      "instructions": "Extract the study title from the context. Rephrase the title to include: Test Article identity, Test System (e.g., mouse, rat, guinea pig), Nature of the study (e.g., pharmacodynamic, pharmacology), Route of administration, Duration of study (number of days, weeks, or months). Title EXAMPLE: An 8-Week Repeat Dose Study Evaluating Plasma PAL and Phenylalanine Levels in Male ENU2 Mice Following 3x Weekly Subcutaneous Administration of 45kD POEGMA-PAL (BMN 390), 60kD POEGMA-PAL, or PEGylated PAL (BMN 165) Conjugates. The First Letter Of Each Word Should Be Capitalized."
+    },
+    {
+      "variable_name": "study_number",
+      "variable_type": "text",
+      "source": [
+        "cayuse"
+      ],
+      "label": "Study Number",
+      "instructions": "Extract the Study Number from the context. It usually starts with ARN-XX-XXX followed by numbers."
+    },
+    {
+      "variable_name": "study_summary",
+      "variable_type": "text",
+      "source": [
+        "cayuse"
+      ],
+      "label": "Study Summary",
+      "instructions": "Extract the study summary along with proposed experiments. Return the full text exactly as written, preserving original wording and formatting."
+    },
+    {
+      "variable_name": "study_objective",
+      "variable_type": "text",
+      "source": [
+        "cayuse"
+      ],
+      "label": "Study Objective",
+      "instructions": "Summarize the study objective."
+    },
+    {
+      "variable_name": "justification_for_species_selection",
+      "variable_type": "text",
+      "source": [
+        "cayuse"
+      ],
+      "label": "Justification For Species Selection",
+      "instructions": "Extract the justification for species selection.  Provide a justification for the selection of this species `only if it's not a common strain` (mice: C57BL/6, BALB/c, CD-1; rats: Sprague Dawley, Wistar, Long Evans). If there is no mention of Justification for Species Selection, return empty string."
+    },
+    {
+      "variable_name": "day_of_first_dose",
+      "variable_type": "datetime",
+      "source": [
+        "benchling"
+      ],
+      "label": "Day Of First Dose",
+      "instructions": "Extract the day of first dose. If none, return 'Could not find Day Of First Dose'."
+    },
+    {
+      "variable_name": "last_day_of_necropsy",
+      "variable_type": "datetime",
+      "source": [
+        "benchling"
+      ],
+      "label": "Last Day Of Necropsy",
+      "instructions": "Extract the last day of necropsy. If none, return 'Could not find Last Day Of Necropsy'."
+    },
+    {
+      "variable_name": "dose_administration",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Dose Administration",
+      "instructions": "Extract dose administration of test article details from Route of Administration, Dose and Volume of Administration, Site and Frequency of Administration sections. If none, return empty string."
+    },
+    {
+      "variable_name": "test_and_control_article_characterization",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test And Control Article Characterization",
+      "instructions": "Extract how test and control articles are characterized. If none, return empty string."
+    },
+    {
+      "variable_name": "dose_preparation_and_analysis_for_test_or_control_articles",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Dose Preparation And Analysis For Test Or Control Articles",
+      "instructions": "Extract dose preparation and analysis details for test or control articles. If none, return empty string."
+    },
+    {
+      "variable_name": "number_of_study_groups",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Number Of Study Groups",
+      "instructions": "Extract the number of study groups. Count different doses as different study groups. If there is no mention of the number of study groups, return empty string."
+    },
+    {
+      "variable_name": "test_article_name",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test Article Name",
+      "instructions": "Extract the 'test article' name. Include information about different concentrations used for the same article, if any. Distinguish test vs control article by reviewing the protocol overview section for context. Sometimes the vehicle and control article are the same, but in studies that are comparing a new version of a drug to the previous generation the control article will be the older drug. If test article is not found, return 'Could not find Test Article Name'."
+    },
+    {
+      "variable_name": "test_article_description",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test Article Description",
+      "instructions": "Extract test article description. Distinguish test vs control article by reviewing the protocol overview section for context. If none, return 'Could not find Test Article Description'."
+    },
+    {
+      "variable_name": "test_article_lot_number",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test Article Lot Number",
+      "instructions": "For the test article you found, extract the test article lot number(s). If none, return 'Could not find Test Article Lot Number'."
+    },
+    {
+      "variable_name": "test_article_expiration_date",
+      "variable_type": "datetime",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test Article Expiration Date",
+      "instructions": "For the test article you found, extract the test article expiration date. If none, return 'Could not find Test Article Expiration Date'."
+    },
+    {
+      "variable_name": "test_article_manufacturer_supplier",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test Article Manufacturer Supplier",
+      "instructions": "For the test article you found, extract the test article manufacturer/supplier. If none, return 'BioMarin Pharmaceutical Inc'."
+    },
+    {
+      "variable_name": "test_article_storage",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Test Article Storage",
+      "instructions": "For the test article you found, extract the test article storage information. If none, return 'Could not find Test Article Storage'."
+    },
+    {
+      "variable_name": "control_article_name",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Control Article Name",
+      "instructions": "For the control article you found, extract the control article name. Ignore vehicles. Include information about different concentrations used for the same article, if any. If none, return 'Could not find Control Article Name'."
+    },
+    {
+      "variable_name": "control_article_lot_number",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Control Article Lot Number",
+      "instructions": "For the control article you found, extract the control article lot number(s). Do not use the vehicle or naive lot numbers. If none, return 'Could not find Control Article Lot Number'."
+    },
+    {
+      "variable_name": "control_article_expiration_date",
+      "variable_type": "datetime",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Control Article Expiration Date",
+      "instructions": "For the control article you found, extract the control article expiration date. If none, return 'Could not find Control Article Expiration Date'."
+    },
+    {
+      "variable_name": "control_article_manufacturer_supplier",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Control Article Manufacturer Supplier",
+      "instructions": "For the control article you found, extract the control article manufacturer/supplier. If none, return 'BioMarin Pharmaceutical Inc'."
+    },
+    {
+      "variable_name": "control_article_storage",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Control Article Storage",
+      "instructions": "For the control article you found, extract the control article storage information. If none, return 'Could not find Control Article Storage'."
+    },
+    {
+      "variable_name": "methods_of_euthanasia",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Methods Of Euthanasia",
+      "instructions": "Extract information about the methods of euthanasia used for Animals euthanized before scheduled termination and for Animals euthanized at scheduled termination. Include details about the method, agent, and any relevant notes."
+    },
+    {
+      "variable_name": "animal_species",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Animal Species",
+      "instructions": "Extract the animal species used in this study and return the species name exactly as written."
+    },
+    {
+      "variable_name": "animal_strains",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Animal Strains",
+      "instructions": "Extract the animal strains used in this study and return the strain name exactly as written."
+    },
+    {
+      "variable_name": "animal_supplier",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Animal Supplier",
+      "instructions": "Extract the animal supplier used in this study and return the supplier name, city, state, country exactly as written."
+    },
+    {
+      "variable_name": "total_number_of_animals",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Total Number Of Animals",
+      "instructions": "Extract the total number of animals used in the study and include sex counts when available. Output format: '{total} (male: {number_of_males}, female: {number_of_females})'. If only one sex count is explicitly provided and total is known, infer the missing sex as remainder: missing = total - provided_count. Use '{total} (gender not specified)' only when no sex-specific counts are available."
+    },
+    {
+      "variable_name": "animal_identification",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Animal Identification",
+      "instructions": "Extract the method used to identify animals/organisms in detail (e.g., Tag, Tattoo)."
+    },
+    {
+      "variable_name": "age_of_dosing",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Age Of Dosing",
+      "instructions": "ONLY extract the age at dosing. If none, return 'Could not find Age Of Dosing'."
+    },
+    {
+      "variable_name": "animal_weight_at_dosing",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Animal Weight At Dosing",
+      "instructions": "ONLY extract the target weight at dosing with units. If none, return 'Could not find Animal Weight At Dosing'."
+    },
+    {
+      "variable_name": "additional_animal_information",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Additional Animal Information",
+      "instructions": "Summarize relevant details about the spare animals used in this study. Include species, strain, source/vendor, identification method, health status/quarantine, housing and enrichment, age and weight at dosing, and other notable animal-related information as a brief 1-2 paragraph summary."
+    },
+    {
+      "variable_name": "environmental_acclimation",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Environmental Acclimation",
+      "instructions": "Extract the environmental acclimation period or process (You MUST only give me the time value (number of days or weeks), no prose)."
+    },
+    {
+      "variable_name": "housing_environment_conditions",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Housing Environment Conditions",
+      "instructions": "Extract housing and environmental conditions. Here's a template to use (edit as needed): 'Animals were housed in Makrolon cages with microisolator caps, using contact bedding, and provided with free access to a standard rodent chow which meets the requirements of the Guide for the Care and Use of Laboratory Animals. No other species were housed in the same room. Each cage was clearly labeled with a cage card indicating study No., cage No., group No., animal ID, strain, sex, birth date, receiving date, Study Director name and contact cell phone numbers. Environmental controls were set to maintain the following animal room conditions and monitored by the Testing Facility: temperature range of 18 to 26ºC, relative humidity range of 30 to 70%, 10 or greater air changes/hour, and a 12-hour light/12-hour dark cycle.'"
+    },
+    {
+      "variable_name": "food_and_water_provided",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Food And Water Provided",
+      "instructions": "Extract all available details about the food and water provided to animals. Convert to past tense."
+    },
+    {
+      "variable_name": "deaths_and_unscheduled_euthanasia",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Deaths And Unscheduled Euthanasia",
+      "instructions": "Extract a summary of procedures from Veterinary Care section for deaths and unscheduled euthanasia, including who determines unscheduled euthanasia, methods used, and necropsy type. Provide a concise paragraph."
+    },
+    {
+      "variable_name": "scheduled_euthanasia_and_necropsy",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Scheduled Euthanasia And Necropsy",
+      "instructions": "Extract a summary of procedures for scheduled euthanasia and necropsy, including timing, methods, and necropsy procedures. Provide a concise paragraph."
+    },
+    {
+      "variable_name": "experimental_design",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Experimental Design",
+      "instructions": "Summarize the experimental design from the section labeled 'Experimental Information'. Preserve original wording, without the section heading. DO NOT include the experimental design table."
+    },
+    {
+      "variable_name": "experimental_design_table",
+      "variable_type": "table",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Experimental Design Table",
+      "instructions": "Extract the table in the form of a JSON. Understand the table structure and information conveyed and sanitize the table to include correct information under the correct column names. If values appear shifted into neighboring cells, correct the placement using header meaning, row context, data type patterns, and consistency with nearby rows."
+    },
+    {
+      "variable_name": "justification_for_dosage_selection",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Justification For Dosage Selection",
+      "instructions": "Extract the full text that provides justification for dose selection and route of administration, including dose concentration, compound names, endotoxin levels, vehicle control, route, and calculation notes. Preserve original wording."
+    },
+    {
+      "variable_name": "terminal_sample_collection",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Terminal Sample Collection",
+      "instructions": "Extract a summary of when and how terminal samples were collected for each sample type, specifying timing, procedures used, sample types, and processing or storage details."
+    },
+    {
+      "variable_name": "timepoints_when_animals_observed",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Timepoints When Animals Observed",
+      "instructions": "Summarize in brief the timepoints when animals were observed from the given table."
+    },
+    {
+      "variable_name": "timepoints_when_body_weights_measured",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Timepoints When Body Weights Measured",
+      "instructions": "Summarize in brief the timepoints when body weights were measured from the given table."
+    },
+    {
+      "variable_name": "in_life_procedures",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "In Life Procedures",
+      "instructions": "Extract other in-life procedures, measures, observations taken. If available, also add key efficacy endpoints first then secondary efficacy endpoints - each in a separate subsection."
+    },
+    {
+      "variable_name": "in_life_sample_collections",
+      "variable_type": "text",
+      "source": [
+        "cayuse"
+      ],
+      "label": "In Life Sample Collections",
+      "instructions": "Extract details on when and how samples were collected for each sample type from the given table."
+    },
+    {
+      "variable_name": "in_life_sample_analysis",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "In Life Sample Analysis",
+      "instructions": "Extract all the sample analysis details from the given table."
+    },
+    {
+      "variable_name": "tissue_collection_organ_weights_table",
+      "variable_type": "table",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Tissue Collection Organ Weights Table",
+      "instructions": "Extract the given table but only include the tissues relevant to this study."
+    },
+    {
+      "variable_name": "tissue_preservation_details",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Tissue Preservation Details",
+      "instructions": "Extract the tissue preservation details."
+    },
+    {
+      "variable_name": "deviations_table",
+      "variable_type": "table",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Deviations Table",
+      "instructions": "Extract the procedures where deviations were made, and make a table with procedure as one column and deviation details as another column."
+    },
+    {
+      "variable_name": "study_director",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Study Director",
+      "instructions": "Extract the Study Director name. Format: Name: {name} \n Phone: {phone} \n Email: {email}. If none, return 'NOT FOUND'."
+    },
+    {
+      "variable_name": "report_author",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Report Author",
+      "instructions": "Extract the Report Author name and other details if present. Format: Name: {name} \n Phone: {phone} \n Email: {email}. If none, return 'NOT FOUND'."
+    },
+    {
+      "variable_name": "principal_investigator",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Principal Investigator",
+      "instructions": "Extract the Principal Investigator name and other details if present. Format: Name: {name} \n Phone: {phone} \n Email: {email}. If none, return 'NOT FOUND'."
+    },
+    {
+      "variable_name": "additional_study_personnel",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Additional Study Personnel",
+      "instructions": "Extract ALL additional study personnel / research staff members. Format each entry as Name: {name} \n Department/Study: {department/study} \n Phone: {phone} \n Email: {email}. If none, return 'NOT FOUND'."
+    },
+    {
+      "variable_name": "executive_summary_of_key_results",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Executive Summary Of Key Results",
+      "instructions": "Summarize the key results of the study in brief."
+    },
+    {
+      "variable_name": "in_life_procedures_key_results",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "In Life Procedures Key Results",
+      "instructions": "Add key results for all in-life procedures including: animal mortality/morbidity, observations, body weights, other procedures. Include animal body weights (individual and mean/SD) over the duration of the study and give a brief written description."
+    },
+    {
+      "variable_name": "dose_analysis_key_results",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Dose Analysis Key Results",
+      "instructions": "Extract all key results for dose analysis in this study."
+    },
+    {
+      "variable_name": "all_other_results",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "All Other Results",
+      "instructions": "Extract all results for this study, excluding results for dose analysis and in-life procedures."
+    },
+    {
+      "variable_name": "study_conclusions_brief_summary",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Study Conclusions Brief Summary",
+      "instructions": "Use the Cayuse protocol to understand the study's objectives and design. With that context, TRY TO extract and synthesize the key conclusions from the Benchling experimental results that are most relevant to those objectives. Capture the overarching findings in 2–3 concise sentences. If the Benchling context does not contain sufficient results or conclusions to summarize, do not forcefully conclude using Cayuse context. Remember that Cayuse is a protocol and it is only useful for you to understand the study objective, not draw conclusions. Only draw conclusions from the benchling context, or state that the context is insufficient."
+    },
+    {
+      "variable_name": "study_conclusions",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Study Conclusions",
+      "instructions": "Use the Cayuse protocol to understand the study's objectives and design. With that context, TRY TO extract and synthesize the key conclusions from the Benchling experimental results that are most relevant to those objectives. Capture the overarching findings in a paragraph or bullet-point style. If the Benchling context does not contain sufficient results or conclusions to summarize, do not forcefully conclude using Cayuse context. Remember that Cayuse is a protocol and it is only useful for you to understand the study objective, not draw conclusions. Only draw conclusions from the benchling context, or state that the context is insufficient."
+    },
+    {
+      "variable_name": "discussion_and_interpretation",
+      "variable_type": "text",
+      "source": [
+        "cayuse",
+        "benchling"
+      ],
+      "label": "Discussion And Interpretation",
+      "instructions": "Using the Cayuse protocol to understand the study's objectives and design, discuss the significance and implications of the findings from the Benchling experimental results that are most relevant to those objectives. If the Benchling context does not contain sufficient results or conclusions to discuss, state that the context is insufficient."
+    },
+    {
+      "variable_name": "tables",
+      "variable_type": "table",
+      "source": [
+        "benchling"
+      ],
+      "label": "Tables",
+      "instructions": "Extract all tables and their captions."
+    },
+    {
+      "variable_name": "figures",
+      "variable_type": "image",
+      "source": [
+        "benchling"
+      ],
+      "label": "Figures",
+      "instructions": "Extract all figures and their captions."
+    }
+  ],
+  "call_groups": [
+    {
+      "group_id": "protocol_overview",
+      "description": "Study overview, protocol identity, objective, and species-selection rationale.",
+      "variables": [
+        "study_title",
+        "study_number",
+        "study_summary",
+        "study_objective",
+        "justification_for_species_selection"
+      ]
+    },
+    {
+      "group_id": "drug_information",
+      "description": "Dose administration.",
+      "variables": [
+        "dose_administration",
+        "day_of_first_dose",
+        "last_day_of_necropsy"
+      ]
+    },
+    {
+      "group_id": "experimental_articles",
+      "description": "Study group count and test/control article identity, lots, expiration dates, and other attributes, and dose preparation.",
+      "variables": [
+        "test_and_control_article_characterization",
+        "dose_preparation_and_analysis_for_test_or_control_articles",
+        "number_of_study_groups",
+        "test_article_name",
+        "test_article_description",
+        "test_article_lot_number",
+        "test_article_expiration_date",
+        "test_article_manufacturer_supplier",
+        "test_article_storage",
+        "control_article_name",
+        "control_article_lot_number",
+        "control_article_expiration_date",
+        "control_article_manufacturer_supplier",
+        "control_article_storage"
+      ]
+    },
+    {
+      "group_id": "animal_demographics",
+      "description": "Animal species, strain, source, counts, identification, and dosing age/weight.",
+      "variables": [
+        "animal_species",
+        "animal_strains",
+        "animal_supplier",
+        "total_number_of_animals",
+        "animal_identification",
+        "age_of_dosing",
+        "animal_weight_at_dosing"
+      ]
+    },
+    {
+      "group_id": "animal_care_and_euthanasia",
+      "description": "Animal care and euthanasia.",
+      "variables": [
+        "environmental_acclimation",
+        "housing_environment_conditions",
+        "food_and_water_provided",
+        "additional_animal_information",
+        "methods_of_euthanasia",
+        "deaths_and_unscheduled_euthanasia",
+        "scheduled_euthanasia_and_necropsy"
+      ]
+    },
+    {
+      "group_id": "experimental_design_and_sampling",
+      "description": "Experimental design, design table, dosage justification, and terminal sample collection.",
+      "variables": [
+        "experimental_design",
+        "experimental_design_table",
+        "justification_for_dosage_selection",
+        "terminal_sample_collection"
+      ]
+    },
+    {
+      "group_id": "procedures_samples_tissues_deviations",
+      "description": "In-life observations, sample collections/analysis, tissue collection, preservation, and deviations.",
+      "variables": [
+        "timepoints_when_animals_observed",
+        "timepoints_when_body_weights_measured",
+        "in_life_procedures",
+        "in_life_sample_collections",
+        "in_life_sample_analysis",
+        "tissue_collection_organ_weights_table",
+        "tissue_preservation_details",
+        "deviations_table"
+      ]
+    },
+    {
+      "group_id": "study_personnel",
+      "description": "Study director, report author, principal investigator, and additional personnel.",
+      "variables": [
+        "study_director",
+        "report_author",
+        "principal_investigator",
+        "additional_study_personnel"
+      ]
+    },
+    {
+      "group_id": "results",
+      "description": "Executive summary and key study results.",
+      "variables": [
+        "executive_summary_of_key_results",
+        "in_life_procedures_key_results",
+        "dose_analysis_key_results",
+        "all_other_results"
+      ]
+    },
+    {
+      "group_id": "conclusions",
+      "description": "Study conclusions and interpretation based on protocol context and experimental results.",
+      "variables": [
+        "study_conclusions_brief_summary",
+        "study_conclusions",
+        "discussion_and_interpretation"
+      ]
+    }
+  ]
+}
