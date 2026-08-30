@@ -1,6 +1,6 @@
 ---
 name: workspace-summary
-description: Produces an evidence-grounded summary of a published document workspace, citing source_id and page numbers for every claim. Use when asked to summarize, describe, report on, or answer a question about the contents of a workspace built by WorkspaceBuilder.
+description: Produces an evidence-grounded summary of a published document workspace, citing source_id and page numbers for every claim. Use when asked to summarize, describe, report on, or answer a question about the contents of a workspace built by WorkspaceBuilder — including structural questions like what sources it contains, what's in it, how it's organized, or what images it has.
 ---
 
 # Workspace Summary
@@ -10,14 +10,31 @@ read-only workspace, grounded in evidence.
 
 ## Steps
 
-1. Read `manifest.json` at the workspace root to discover every source: its
-   `source_id`, `source_role`, and `normalized_path`.
-2. For each source, read its normalized Markdown (`normalized_path`) — the
-   full document text, headed by `#`/`##`/... section markers.
-3. Use `grep_workspace` to locate content relevant to the request before
-   reading whole files, when the workspace has many sources.
-4. Write one summary per source, then a short overall synthesis if there is
-   more than one source.
+1. **Build the structure.** Read `manifest.json` and, from `sources[]`, build
+   the source tree by following each source's `parent_source_id` back to its
+   root. Note each source's `source_role` (or its absence) and, from
+   `assets[]`, which files belong to it. This pass runs for every request,
+   not only "summarize" ones — knowing that a source is a promoted attachment
+   of another matters for judging relevance even when the output only
+   answers a narrow question.
+2. **Inspect the images.** Among each source's assets, an image is one whose
+   extension is `.png`, `.jpg`, `.jpeg`, `.gif`, or `.webp` — the same set
+   `inspect_image` accepts, so nothing gets sent that the tool would reject
+   anyway. For a general summary, call `inspect_image` on every one found;
+   a complete picture of the workspace means every image gets read, not a
+   sample chosen by count. For a narrow question, call it only on images the
+   question actually turns on. A workspace with no images simply skips this
+   step — there's nothing to special-case.
+3. **Read the content.** For each source, read its normalized Markdown
+   (`normalized_path`) — the full document text, headed by `#`/`##`/...
+   section markers. Use `grep_workspace` to locate relevant content before
+   reading whole files when the workspace has many sources.
+4. **Write the output.** For a general summary, open with the structural
+   picture built in step 1 (source tree, roles, asset and image counts),
+   then give per-source content, folding in what step 2 found about each
+   source's images. For a narrow question, skip the structural section —
+   it already did its job by helping decide what's relevant — and answer
+   directly.
 
 ## Grounding rule
 
@@ -25,18 +42,24 @@ Every factual claim must cite the `source_id` it came from and, when the
 claim traces to a specific page, the page number(s). Page numbers for a
 section come from that source's `document.sections.json`
 (`source_pages` on the section covering the claim) — read that file via
-`read_workspace_file` when a citation needs a page number. Never state
-something the workspace text doesn't support — say what's missing instead
-of guessing.
+`read_workspace_file` when a citation needs a page number. An `inspect_image`
+result is evidence like any other: cite the image's path and its source_id.
+Don't state something the workspace text or an image doesn't support — say
+what's missing instead of guessing.
 
 ## Output shape
 
 Plain Markdown. No fixed template beyond this:
 
 ```
+## Workspace structure
+<source tree with roles; asset and image counts per source>
+
 ## <source_role or source_id>
-<summary, with inline citations like (src_..., p. N)>
+<content, with inline citations like (src_..., p. N) or (src_..., path)>
 ```
 
-If asked a specific question instead of "summarize", answer the question
-using the same grounding rule, and skip sources that aren't relevant to it.
+Include the "Workspace structure" section only when the request is a general
+summary or asks about the workspace's structure or contents rather than a
+specific fact. For a narrow question, answer it directly using the same
+grounding rule, and skip sources that aren't relevant to it.
