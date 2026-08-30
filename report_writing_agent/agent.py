@@ -58,7 +58,7 @@ def make_workspace_tools(workspace_root: Path) -> list[Callable[..., dict]]:
             A dict with "status" and "paths" (sorted, workspace-relative).
         """
         paths = sorted(
-            str(path.relative_to(workspace_root))
+            path.relative_to(workspace_root).as_posix()
             for path in workspace_root.glob(pattern)
             if path.is_file() and _within_root(path, workspace_root)
         )
@@ -92,7 +92,7 @@ def make_workspace_tools(workspace_root: Path) -> list[Callable[..., dict]]:
                 text = path.read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):
                 continue
-            relative = str(path.relative_to(workspace_root))
+            relative = path.relative_to(workspace_root).as_posix()
             for line_number, line in enumerate(text.splitlines(), start=1):
                 if compiled.search(line):
                     matches.append({"path": relative, "line_number": line_number, "line": line})
