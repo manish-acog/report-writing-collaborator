@@ -20,3 +20,19 @@ class StructureIndexingError(Exception):
 
 class WorkspaceBuildError(Exception):
     """Raised when a workspace cannot be built or published."""
+
+
+class ElnNormalizationError(Exception):
+    """Base error for fatal ELN normalization failures."""
+
+
+class ElnAuthenticationError(ElnNormalizationError):
+    """Raised when Benchling API authentication fails."""
+
+
+class ElnFetchError(ElnNormalizationError):
+    """Raised when fetching an entry or its external files fails."""
+
+
+class ElnParseError(ElnNormalizationError):
+    """Raised when a fetched entry cannot be rendered to Markdown."""

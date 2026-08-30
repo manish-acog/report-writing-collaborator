@@ -6,8 +6,15 @@ __all__ = [
     "DocumentNormalizer",
     "DocumentParseError",
     "DocumentStructure",
+    "ElnAuthenticationError",
+    "ElnFetchError",
+    "ElnNormalizationError",
+    "ElnNormalizer",
+    "ElnParseError",
+    "ElnSource",
     "EmbeddedFile",
     "FileHashes",
+    "FileSource",
     "IndexerTooling",
     "ManifestAsset",
     "ManifestEmbeddedFile",
@@ -25,7 +32,6 @@ __all__ = [
     "WorkspaceBuildError",
     "WorkspaceConfig",
     "WorkspaceManifest",
-    "WorkspaceSource",
     "build_workspace",
 ]
 
@@ -41,10 +47,15 @@ from report_writing_collaborator.document_normalizer import (
     SourceSpec,
     Tooling,
 )
+from report_writing_collaborator.eln_normalizer import ElnNormalizer, ElnSource
 from report_writing_collaborator.exceptions import (
     DocumentConversionError,
     DocumentNormalizationError,
     DocumentParseError,
+    ElnAuthenticationError,
+    ElnFetchError,
+    ElnNormalizationError,
+    ElnParseError,
     StructureIndexingError,
     UnsupportedDocumentTypeError,
     WorkspaceBuildError,
@@ -57,11 +68,11 @@ from report_writing_collaborator.structure_indexer import (
     StructureIndexer,
 )
 from report_writing_collaborator.workspace_builder import (
+    FileSource,
     ManifestAsset,
     ManifestEmbeddedFile,
     ManifestSource,
     WorkspaceConfig,
     WorkspaceManifest,
-    WorkspaceSource,
     build_workspace,
 )

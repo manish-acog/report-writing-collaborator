@@ -3,14 +3,16 @@ from __future__ import annotations
 import glob
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pymupdf
 import pytest
 
 from report_writing_collaborator import (
+    ElnSource,
+    FileSource,
     WorkspaceBuildError,
     WorkspaceConfig,
-    WorkspaceSource,
     build_workspace,
 )
 
@@ -37,7 +39,7 @@ def test_build_workspace_single_source(tmp_path: Path) -> None:
     config = WorkspaceConfig(publish_root=tmp_path / "published")
 
     manifest = build_workspace(
-        [WorkspaceSource(path=source, source_instance_id="source_01", source_role="protocol")],
+        [FileSource(path=source, source_instance_id="source_01", source_role="protocol")],
         config,
     )
 
@@ -69,8 +71,8 @@ def test_build_workspace_multiple_sources_have_distinct_section_ids(tmp_path: Pa
 
     manifest = build_workspace(
         [
-            WorkspaceSource(path=source_a, source_instance_id="source_01"),
-            WorkspaceSource(path=source_b, source_instance_id="source_02"),
+            FileSource(path=source_a, source_instance_id="source_01"),
+            FileSource(path=source_b, source_instance_id="source_02"),
         ],
         config,
     )
@@ -95,8 +97,8 @@ def test_duplicate_source_instance_id_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(WorkspaceBuildError, match="Duplicate source_instance_id"):
         build_workspace(
             [
-                WorkspaceSource(path=source, source_instance_id="source_01"),
-                WorkspaceSource(path=source, source_instance_id="source_01"),
+                FileSource(path=source, source_instance_id="source_01"),
+                FileSource(path=source, source_instance_id="source_01"),
             ],
             config,
         )
@@ -117,10 +119,10 @@ def test_new_version_chains_to_previous(tmp_path: Path) -> None:
     config = WorkspaceConfig(publish_root=tmp_path / "published")
 
     manifest_v1 = build_workspace(
-        [WorkspaceSource(path=source_v1, source_instance_id="source_01")], config
+        [FileSource(path=source_v1, source_instance_id="source_01")], config
     )
     manifest_v2 = build_workspace(
-        [WorkspaceSource(path=source_v2, source_instance_id="source_01")],
+        [FileSource(path=source_v2, source_instance_id="source_01")],
         WorkspaceConfig(
             publish_root=config.publish_root,
             workspace_id=manifest_v1.workspace_id,
@@ -146,7 +148,7 @@ def test_previous_version_must_exist(tmp_path: Path) -> None:
     )
 
     with pytest.raises(WorkspaceBuildError, match="not found"):
-        build_workspace([WorkspaceSource(path=source, source_instance_id="source_01")], config)
+        build_workspace([FileSource(path=source, source_instance_id="source_01")], config)
 
 
 def test_previous_version_requires_workspace_id(tmp_path: Path) -> None:
@@ -155,20 +157,18 @@ def test_previous_version_requires_workspace_id(tmp_path: Path) -> None:
     config = WorkspaceConfig(publish_root=tmp_path / "published", previous_version=1)
 
     with pytest.raises(WorkspaceBuildError, match="requires workspace_id"):
-        build_workspace([WorkspaceSource(path=source, source_instance_id="source_01")], config)
+        build_workspace([FileSource(path=source, source_instance_id="source_01")], config)
 
 
 def test_reusing_workspace_id_without_previous_version_fails_fast(tmp_path: Path) -> None:
     source = tmp_path / "sample.pdf"
     _make_pdf(source, "Title")
     config = WorkspaceConfig(publish_root=tmp_path / "published")
-    manifest = build_workspace(
-        [WorkspaceSource(path=source, source_instance_id="source_01")], config
-    )
+    manifest = build_workspace([FileSource(path=source, source_instance_id="source_01")], config)
 
     with pytest.raises(WorkspaceBuildError, match="already exists"):
         build_workspace(
-            [WorkspaceSource(path=source, source_instance_id="source_01")],
+            [FileSource(path=source, source_instance_id="source_01")],
             WorkspaceConfig(publish_root=config.publish_root, workspace_id=manifest.workspace_id),
         )
 
@@ -183,8 +183,8 @@ def test_failed_build_preserves_staging_for_inspection(tmp_path: Path) -> None:
     with pytest.raises(WorkspaceBuildError, match="staging preserved"):
         build_workspace(
             [
-                WorkspaceSource(path=good_source, source_instance_id="source_01"),
-                WorkspaceSource(path=bad_source, source_instance_id="source_02"),
+                FileSource(path=good_source, source_instance_id="source_01"),
+                FileSource(path=bad_source, source_instance_id="source_02"),
             ],
             config,
         )
@@ -204,15 +204,15 @@ def test_parent_source_id_is_recorded(tmp_path: Path) -> None:
     config = WorkspaceConfig(publish_root=tmp_path / "published")
 
     manifest = build_workspace(
-        [WorkspaceSource(path=parent, source_instance_id="source_01")],
+        [FileSource(path=parent, source_instance_id="source_01")],
         config,
     )
     parent_source_id = manifest.sources[0].source_id
 
     manifest_with_child = build_workspace(
         [
-            WorkspaceSource(path=parent, source_instance_id="source_01"),
-            WorkspaceSource(
+            FileSource(path=parent, source_instance_id="source_01"),
+            FileSource(
                 path=child,
                 source_instance_id="source_02",
                 parent_source_id=parent_source_id,
@@ -225,3 +225,57 @@ def test_parent_source_id_is_recorded(tmp_path: Path) -> None:
         s for s in manifest_with_child.sources if s.source_instance_id == "source_02"
     )
     assert child_entry.parent_source_id == parent_source_id
+
+
+def test_mixed_source_workspace_dispatches_both_normalizers(tmp_path: Path) -> None:
+    pdf_source = tmp_path / "protocol.pdf"
+    _make_pdf(pdf_source, "Protocol")
+    entry = {
+        "id": "etr_1",
+        "displayId": "EXP001",
+        "name": "Notebook Entry",
+        "days": [{"date": "2026-01-01", "notes": [{"type": "text", "text": "Ran assay."}]}],
+    }
+    config = WorkspaceConfig(
+        publish_root=tmp_path / "published",
+        benchling_api_key="key",
+        benchling_url="https://x.benchling.com",
+    )
+
+    with (
+        patch(
+            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            return_value=entry,
+        ),
+        patch(
+            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            return_value={},
+        ),
+        patch(
+            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            return_value=({}, ()),
+        ),
+    ):
+        manifest = build_workspace(
+            [
+                FileSource(path=pdf_source, source_instance_id="source_01", source_role="protocol"),
+                ElnSource(entry_id="etr_1", source_instance_id="source_02", source_role="notebook"),
+            ],
+            config,
+        )
+
+    source_types = {s.source_instance_id: s.source_type for s in manifest.sources}
+    assert source_types == {"source_01": "pdf", "source_02": "eln"}
+    published_dir = config.publish_root / manifest.workspace_id / "1"
+    for source in manifest.sources:
+        assert (published_dir / source.normalized_path).is_file()
+
+
+def test_eln_source_without_credentials_fails_fast(tmp_path: Path) -> None:
+    config = WorkspaceConfig(publish_root=tmp_path / "published")
+
+    with pytest.raises(WorkspaceBuildError, match="benchling_api_key"):
+        build_workspace(
+            [ElnSource(entry_id="etr_1", source_instance_id="source_01")],
+            config,
+        )

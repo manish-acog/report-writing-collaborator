@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from report_writing_collaborator.document_normalizer import DocumentNormalizer, SourceSpec
+from report_writing_collaborator.eln_normalizer import ElnNormalizer, ElnSource
 from report_writing_collaborator.exceptions import WorkspaceBuildError
 from report_writing_collaborator.structure_indexer import StructureIndexer
 
@@ -26,7 +27,7 @@ _WORKSPACE_ID_PREFIX = "ws_"
 
 
 @dataclass(frozen=True, slots=True)
-class WorkspaceSource:
+class FileSource:
     path: Path
     source_instance_id: str
     source_role: str | None = None
@@ -37,6 +38,8 @@ class WorkspaceSource:
 class WorkspaceConfig:
     publish_root: Path
     libreoffice_path: str | Path = "soffice"
+    benchling_api_key: str | None = None
+    benchling_url: str | None = None
     workspace_id: str | None = None
     previous_version: int | None = None
 
@@ -81,13 +84,14 @@ class WorkspaceManifest:
 
 
 def build_workspace(
-    sources: list[WorkspaceSource],
+    sources: list[FileSource | ElnSource],
     config: WorkspaceConfig,
 ) -> WorkspaceManifest:
     if not sources:
         raise WorkspaceBuildError("At least one source is required")
 
     _check_unique_instance_ids(sources)
+    _check_eln_credentials(sources, config)
     workspace_id, workspace_version, previous_version = _resolve_lineage(config)
 
     workspace_dir = config.publish_root / workspace_id
@@ -126,7 +130,7 @@ def build_workspace(
 
 
 def _build_in_staging(
-    sources: list[WorkspaceSource],
+    sources: list[FileSource | ElnSource],
     staging_dir: Path,
     config: WorkspaceConfig,
     *,
@@ -135,6 +139,11 @@ def _build_in_staging(
     previous_version: int | None,
 ) -> WorkspaceManifest:
     normalizer = DocumentNormalizer(staging_dir, libreoffice_path=config.libreoffice_path)
+    eln_normalizer = ElnNormalizer(
+        staging_dir,
+        api_key=config.benchling_api_key or "",
+        benchling_url=config.benchling_url or "",
+    )
     indexer = StructureIndexer(staging_dir)
 
     manifest_sources: list[ManifestSource] = []
@@ -142,9 +151,13 @@ def _build_in_staging(
     manifest_embedded_files: list[ManifestEmbeddedFile] = []
 
     for source in sources:
-        normalized = normalizer.normalize_document(
-            SourceSpec(path=source.path, source_instance_id=source.source_instance_id)
-        )
+        if isinstance(source, FileSource):
+            normalized = normalizer.normalize_document(
+                SourceSpec(path=source.path, source_instance_id=source.source_instance_id)
+            )
+        else:
+            normalized = eln_normalizer.normalize_entry(source)
+
         structure = indexer.index_structure(normalized)
         sections_path = _write_sections(staging_dir, normalized.source_id, structure)
 
@@ -190,13 +203,21 @@ def _build_in_staging(
     return manifest
 
 
-def _check_unique_instance_ids(sources: list[WorkspaceSource]) -> None:
+def _check_unique_instance_ids(sources: list[FileSource | ElnSource]) -> None:
     seen: set[str] = set()
 
     for source in sources:
         if source.source_instance_id in seen:
             raise WorkspaceBuildError(f"Duplicate source_instance_id: {source.source_instance_id}")
         seen.add(source.source_instance_id)
+
+
+def _check_eln_credentials(sources: list[FileSource | ElnSource], config: WorkspaceConfig) -> None:
+    has_eln_source = any(isinstance(source, ElnSource) for source in sources)
+    if has_eln_source and not (config.benchling_api_key and config.benchling_url):
+        raise WorkspaceBuildError(
+            "benchling_api_key and benchling_url are required when an ElnSource is included"
+        )
 
 
 def _resolve_lineage(config: WorkspaceConfig) -> tuple[str, int, int | None]:
