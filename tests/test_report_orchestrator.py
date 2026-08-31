@@ -146,7 +146,7 @@ def test_write_report_merges_call_groups_and_renders(
         return_value={
             "title": {
                 "status": "found",
-                "value": "My Report",
+                "value": "My Report[[cite:0]]",
                 "citations": [{"source_id": "src_a", "page": 1}],
             },
             "conclusion": {"status": "not_found"},
@@ -155,6 +155,6 @@ def test_write_report_merges_call_groups_and_renders(
         result = report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
 
     assert run_call.call_count == 1
-    assert "# My Report" in result
+    assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result
     assert "Not addressed in the available evidence." in result
     assert "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 1" in result

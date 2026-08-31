@@ -141,8 +141,8 @@ markup); nothing about extraction, the schema, or the other templates changes.
 - **Chose:** B.
 - **Consequences:** enforcement is real — a response missing `citations` on a
   found field doesn't parse against the schema, so it can't silently succeed.
-  No regex fragility against however the model chose to format an inline
-  citation.
+  Claim-to-citation attachment uses only the bounded `[[cite:N]]` marker
+  grammar; the renderer never tries to infer citations from prose.
 
 ### Mandatory references are a renderer guarantee, not a skill-authored field
 
@@ -151,9 +151,9 @@ markup); nothing about extraction, the schema, or the other templates changes.
   dedupes `citations` across every field and requires every template to
   contain a reserved `{{references}}` placeholder.
 - **Chose:** B.
-- **Consequences:** no skill can ship without references by omission — the
-  mechanism enforces it, not per-skill discipline. The non-clinical skill
-  inherits this for free later.
+- **Consequences:** no skill can ship without references by omission. The
+  renderer numbers distinct citations in template order, resolves field-local
+  markers, and emits matching anchor targets in both Markdown and HTML.
 
 ### Plain placeholder substitution, no template engine
 
@@ -201,18 +201,15 @@ markup); nothing about extraction, the schema, or the other templates changes.
 - **Rendering as an agent-callable tool** — explicitly deferred.
 - **Output formats beyond Markdown and HTML** — no third format has a
   concrete need yet.
-- **Citation format validation beyond schema typing** — `source_id` existing
-  in the workspace isn't cross-checked here; that's the Verification module's
-  job, unchanged.
 
 ## Open questions
 
 None blocking.
 
-## Next
+## Implementation
 
-Implement `variable_config` and `report_renderer` in
-`src/report_writing_collaborator/`, extend the ADK orchestration driver to run
-one bounded call per `call_group` and merge results, then author the
-`general-report-writing` skill's `variables.json` and both templates.
-Smoke-test end to end against one real workspace.
+Implemented in `variable_config.py`, `report_renderer.py`, and
+`report_orchestrator.py`, with the general-report-writing skill's variable
+configuration and Markdown/HTML templates. Citation enrichment and
+claim-level marker resolution are specified by their focused follow-on design
+documents.

@@ -105,7 +105,7 @@ def test_render_substitutes_found_and_not_found_fields(tmp_path: Path) -> None:
     assert "Not addressed in the available evidence." in result
 
 
-def test_render_markdown_references_are_enriched_deduped_and_sorted(tmp_path: Path) -> None:
+def test_render_markdown_references_are_numbered_in_first_seen_order(tmp_path: Path) -> None:
     template = _write_template(tmp_path, "report.md", "{{title}}{{conclusion}}{{references}}")
     values = {
         **_VALUES,
@@ -121,13 +121,14 @@ def test_render_markdown_references_are_enriched_deduped_and_sorted(tmp_path: Pa
 
     result = render(template, values, _make_workspace(tmp_path))
 
-    parent = "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 2"
     child = "[Appendix.pdf](sources/src_b/original.pdf), attached within Protocol.pdf, p. 3"
-    assert result.count(parent) == 1
+    parent = "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 2"
     assert result.count(child) == 1
-    assert result.index(parent) < result.index(child)
+    assert result.count(parent) == 1
+    assert result.index(child) < result.index(parent)
+    assert '<a id="ref-1"></a>\n- 1. ' + child in result
+    assert '<a id="ref-2"></a>\n- 2. ' + parent in result
     assert "<blockquote><pre># Findings\nEvidence from protocol.</pre></blockquote>" in result
-    assert "- src_a" not in result
 
 
 def test_render_html_references_use_escaped_markup(tmp_path: Path) -> None:
@@ -142,12 +143,96 @@ def test_render_html_references_use_escaped_markup(tmp_path: Path) -> None:
     )
 
     assert (
-        '<ul><li><a href="sources/src_a/original.pdf">Protocol.pdf</a> (protocol), p. 2'
+        '<ul><li id="ref-1">1. '
+        '<a href="sources/src_a/original.pdf">Protocol.pdf</a> (protocol), p. 2'
     ) in result
     assert (
         "<blockquote><pre># Findings\n"
         "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;</pre></blockquote>"
     ) in result
+
+
+def test_render_resolves_local_markers_in_template_order(tmp_path: Path) -> None:
+    template = _write_template(
+        tmp_path,
+        "report.md",
+        "{{title}}\n{{conclusion}}\n{{references}}",
+    )
+    values = {
+        "conclusion": {
+            "status": "found",
+            "value": "Conclusion claim[[cite:0]].",
+            "citations": [{"source_id": "src_a", "section_id": "sec_a", "page": 2}],
+        },
+        "title": {
+            "status": "found",
+            "value": "First claim[[cite:0]][[cite:1]]. Second claim[[cite:0]].",
+            "citations": [
+                {"source_id": "src_b", "section_id": "sec_b", "page": 3},
+                {"source_id": "src_a", "section_id": "sec_a", "page": 2},
+            ],
+        },
+    }
+
+    result = render(template, values, _make_workspace(tmp_path))
+
+    ref_1 = '<sup><a href="#ref-1">1</a></sup>'
+    ref_2 = '<sup><a href="#ref-2">2</a></sup>'
+    assert f"First claim{ref_1}{ref_2}. Second claim{ref_1}." in result
+    assert f"Conclusion claim{ref_2}." in result
+    assert result.count('id="ref-1"') == 1
+    assert result.count('id="ref-2"') == 1
+
+
+def test_render_keeps_multi_page_evidence_distinct(tmp_path: Path) -> None:
+    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
+    values = {
+        "title": {
+            "status": "found",
+            "value": "Two-page claim[[cite:0]][[cite:1]].",
+            "citations": [
+                {"source_id": "src_a", "section_id": "sec_a", "page": 1},
+                {"source_id": "src_a", "section_id": "sec_a", "page": 2},
+            ],
+        }
+    }
+
+    result = render(template, values, _make_workspace(tmp_path))
+
+    assert (
+        'Two-page claim<sup><a href="#ref-1">1</a></sup><sup><a href="#ref-2">2</a></sup>.'
+    ) in result
+    assert "p. 1" in result
+    assert "p. 2" in result
+
+
+def test_render_rejects_out_of_range_marker(tmp_path: Path) -> None:
+    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
+    values = {
+        "title": {
+            "status": "found",
+            "value": "Claim[[cite:1]].",
+            "citations": [{"source_id": "src_a", "page": 2}],
+        }
+    }
+
+    with pytest.raises(ReportRenderError, match=r"out of range.*title"):
+        render(template, values, _make_workspace(tmp_path))
+
+
+def test_render_leaves_malformed_marker_literal(tmp_path: Path) -> None:
+    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
+    values = {
+        "title": {
+            "status": "found",
+            "value": "Claim[[cite:]].",
+            "citations": [{"source_id": "src_a", "page": 2}],
+        }
+    }
+
+    result = render(template, values, _make_workspace(tmp_path))
+
+    assert "Claim[[cite:]]." in result
 
 
 def test_render_preview_is_bounded_to_400_characters(tmp_path: Path) -> None:

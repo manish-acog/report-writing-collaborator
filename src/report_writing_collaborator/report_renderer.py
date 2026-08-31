@@ -1,7 +1,7 @@
 """Renders a completed value map into final report text via one template.
 
-Pure function: no model access, no state. See docs/general_report_writing.md
-and docs/citation_enrichment.md for the design.
+Pure function: no model access, no state. See docs/general_report_writing.md,
+docs/citation_enrichment.md, and docs/citation_granularity.md for the design.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+_CITATION_MARKER_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
 _REFERENCES_KEY = "references"
 _NOT_FOUND_FALLBACK = "Not addressed in the available evidence."
 _NO_CITATIONS_MARKDOWN = "_No cited sources._"
@@ -28,6 +29,8 @@ _HTML_SUFFIX = ".html"
 _MANIFEST_NAME = "manifest.json"
 _EXCERPT_MAX_CHARS = 400
 _ELLIPSIS = "…"
+
+CitationKey = tuple[str, str | None, int | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +46,7 @@ class _Source:
 
 @dataclass(frozen=True, slots=True)
 class _Reference:
+    number: int
     source: _Source
     page: int | None
     preview: str | None
@@ -76,16 +80,21 @@ def render(
     except OSError as error:
         raise ReportRenderError(f"Cannot read template: {template_path}") from error
 
-    placeholders = set(_PLACEHOLDER_PATTERN.findall(template))
-    if _REFERENCES_KEY not in placeholders:
+    placeholder_names = _PLACEHOLDER_PATTERN.findall(template)
+    if _REFERENCES_KEY not in placeholder_names:
         raise ReportRenderError(
             f"Template is missing the required {{{{{_REFERENCES_KEY}}}}} "
             f"placeholder: {template_path}"
         )
 
-    substitutions = {name: _render_field(field) for name, field in values.items()}
+    fields = _ordered_fields(placeholder_names, values, template_path)
+    citations = _collect_citations(fields)
+    citation_numbers = {
+        _citation_key(citation): number for number, citation in enumerate(citations, start=1)
+    }
+    substitutions = {name: _render_field(name, field, citation_numbers) for name, field in fields}
     substitutions[_REFERENCES_KEY] = _render_references(
-        values,
+        citations,
         template_path.suffix,
         workspace_root,
     )
@@ -101,11 +110,47 @@ def render(
     return _PLACEHOLDER_PATTERN.sub(replace, template)
 
 
-def _render_field(field: Mapping[str, object]) -> str:
+def _ordered_fields(
+    placeholder_names: list[str],
+    values: Mapping[str, Mapping[str, object]],
+    template_path: Path,
+) -> list[tuple[str, Mapping[str, object]]]:
+    seen: set[str] = set()
+    fields: list[tuple[str, Mapping[str, object]]] = []
+    for name in placeholder_names:
+        if name == _REFERENCES_KEY or name in seen:
+            continue
+        if name not in values:
+            raise ReportRenderError(
+                f"Template references unknown variable '{name}': {template_path}"
+            )
+        seen.add(name)
+        fields.append((name, values[name]))
+
+    return fields
+
+
+def _render_field(
+    field_name: str,
+    field: Mapping[str, object],
+    citation_numbers: Mapping[CitationKey, int],
+) -> str:
     if field.get("status") != "found":
         return _NOT_FOUND_FALLBACK
 
-    return _stringify(field["value"])
+    value = _stringify(field["value"])
+    citations = _field_citations(field)
+
+    def replace(match: re.Match[str]) -> str:
+        local_index = int(match.group(1))
+        if local_index >= len(citations):
+            raise ReportRenderError(
+                f"Citation marker index {local_index} is out of range for field '{field_name}'"
+            )
+        number = citation_numbers[_citation_key(citations[local_index])]
+        return f'<sup><a href="#ref-{number}">{number}</a></sup>'
+
+    return _CITATION_MARKER_PATTERN.sub(replace, value)
 
 
 def _stringify(value: object) -> str:
@@ -116,53 +161,63 @@ def _stringify(value: object) -> str:
 
 
 def _render_references(
-    values: Mapping[str, Mapping[str, object]],
+    citations: list[Mapping[str, object]],
     template_suffix: str,
     workspace_root: Path,
 ) -> str:
-    citations = _collect_citations(values)
     if not citations:
         return _NO_CITATIONS_HTML if template_suffix == _HTML_SUFFIX else _NO_CITATIONS_MARKDOWN
 
     sources = _load_sources(workspace_root)
-    references = [_resolve_reference(citation, sources, workspace_root) for citation in citations]
+    references = [
+        _resolve_reference(citation, number, sources, workspace_root)
+        for number, citation in enumerate(citations, start=1)
+    ]
     if template_suffix == _HTML_SUFFIX:
-        items = "".join(f"<li>{_format_html(reference, sources)}</li>" for reference in references)
+        items = "".join(
+            f'<li id="ref-{reference.number}">{reference.number}. '
+            f"{_format_html(reference, sources)}</li>"
+            for reference in references
+        )
         return f"<ul>{items}</ul>"
 
-    return "\n".join(f"- {_format_markdown(reference, sources)}" for reference in references)
+    return "\n".join(
+        f'<a id="ref-{reference.number}"></a>\n'
+        f"- {reference.number}. {_format_markdown(reference, sources)}"
+        for reference in references
+    )
 
 
 def _collect_citations(
-    values: Mapping[str, Mapping[str, object]],
+    fields: list[tuple[str, Mapping[str, object]]],
 ) -> list[Mapping[str, object]]:
-    seen: set[tuple[str, str | None, int | None]] = set()
+    seen: set[CitationKey] = set()
     citations: list[Mapping[str, object]] = []
 
-    for field in values.values():
+    for _, field in fields:
         if field.get("status") != "found":
             continue
-        # The precise shape is validated upstream by variable_config's schema;
-        # Mapping[str, object] cannot express it statically.
-        raw_citations = cast("list[Mapping[str, object]]", field.get("citations", []))
-        for citation in raw_citations:
-            key = (
-                cast("str", citation["source_id"]),
-                cast("str | None", citation.get("section_id")),
-                cast("int | None", citation.get("page")),
-            )
+        for citation in _field_citations(field):
+            key = _citation_key(citation)
             if key in seen:
                 continue
             seen.add(key)
             citations.append(citation)
 
-    return sorted(
-        citations,
-        key=lambda citation: (
-            citation["source_id"],
-            citation.get("section_id") or "",
-            citation.get("page") or 0,
-        ),
+    return citations
+
+
+def _field_citations(field: Mapping[str, object]) -> list[Mapping[str, object]]:
+    # The precise shape is validated upstream by variable_config's schema;
+    # Mapping[str, object] cannot express it statically.
+    return cast("list[Mapping[str, object]]", field.get("citations", []))
+
+
+def _citation_key(citation: Mapping[str, object]) -> CitationKey:
+    return (
+        cast("str", citation["source_id"]),
+        cast("str | None", citation.get("section_id")),
+        cast("int | None", citation.get("page")),
     )
 
 
@@ -195,6 +250,7 @@ def _load_sources(workspace_root: Path) -> dict[str, _Source]:
 
 def _resolve_reference(
     citation: Mapping[str, object],
+    number: int,
     sources: Mapping[str, _Source],
     workspace_root: Path,
 ) -> _Reference:
@@ -208,6 +264,7 @@ def _resolve_reference(
     preview = _read_preview(workspace_root, source, section_id) if section_id is not None else None
 
     return _Reference(
+        number=number,
         source=source,
         page=cast("int | None", citation.get("page")),
         preview=preview,
