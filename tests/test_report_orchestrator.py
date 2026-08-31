@@ -157,4 +157,4 @@ def test_write_report_merges_call_groups_and_renders(
     assert run_call.call_count == 1
     assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result
     assert "Not addressed in the available evidence." in result
-    assert "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 1" in result
+    assert "[Protocol.pdf](sources/src_a/original.pdf#page=1) (protocol), page 1" in result

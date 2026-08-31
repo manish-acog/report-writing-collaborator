@@ -1,7 +1,8 @@
 """Renders a completed value map into final report text via one template.
 
 Pure function: no model access, no state. See docs/general_report_writing.md,
-docs/citation_enrichment.md, and docs/citation_granularity.md for the design.
+docs/citation_enrichment.md, docs/citation_granularity.md, and
+docs/citation_presentation_cleanup.md for the design.
 """
 
 from __future__ import annotations
@@ -21,14 +22,13 @@ if TYPE_CHECKING:
 
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 _CITATION_MARKER_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
+_CITATION_MARKER_RUN_PATTERN = re.compile(r"(?:\[\[cite:\d+\]\])+")
 _REFERENCES_KEY = "references"
 _NOT_FOUND_FALLBACK = "Not addressed in the available evidence."
 _NO_CITATIONS_MARKDOWN = "_No cited sources._"
 _NO_CITATIONS_HTML = "<p>No cited sources.</p>"
 _HTML_SUFFIX = ".html"
 _MANIFEST_NAME = "manifest.json"
-_EXCERPT_MAX_CHARS = 400
-_ELLIPSIS = "…"
 
 CitationKey = tuple[str, str | None, int | None]
 
@@ -39,8 +39,6 @@ class _Source:
     source_role: str | None
     original_filename: str
     original_path: str
-    normalized_path: str
-    sections_path: str
     parent_source_id: str | None
 
 
@@ -49,7 +47,6 @@ class _Reference:
     number: int
     source: _Source
     page: int | None
-    preview: str | None
 
 
 def render(
@@ -141,8 +138,8 @@ def _render_field(
     value = _stringify(field["value"])
     citations = _field_citations(field)
 
-    def replace(match: re.Match[str]) -> str:
-        local_index = int(match.group(1))
+    def citation_link(marker: re.Match[str]) -> str:
+        local_index = int(marker.group(1))
         if local_index >= len(citations):
             raise ReportRenderError(
                 f"Citation marker index {local_index} is out of range for field '{field_name}'"
@@ -150,7 +147,12 @@ def _render_field(
         number = citation_numbers[_citation_key(citations[local_index])]
         return f'<sup><a href="#ref-{number}">{number}</a></sup>'
 
-    return _CITATION_MARKER_PATTERN.sub(replace, value)
+    def replace(run: re.Match[str]) -> str:
+        return ",".join(
+            citation_link(marker) for marker in _CITATION_MARKER_PATTERN.finditer(run.group(0))
+        )
+
+    return _CITATION_MARKER_RUN_PATTERN.sub(replace, value)
 
 
 def _stringify(value: object) -> str:
@@ -175,15 +177,14 @@ def _render_references(
     ]
     if template_suffix == _HTML_SUFFIX:
         items = "".join(
-            f'<li id="ref-{reference.number}">{reference.number}. '
-            f"{_format_html(reference, sources)}</li>"
+            f'<li id="ref-{reference.number}">{_format_html(reference, sources)}</li>'
             for reference in references
         )
-        return f"<ul>{items}</ul>"
+        return f"<ol>{items}</ol>"
 
     return "\n".join(
         f'<a id="ref-{reference.number}"></a>\n'
-        f"- {reference.number}. {_format_markdown(reference, sources)}"
+        f"{reference.number}. {_format_markdown(reference, sources)}"
         for reference in references
     )
 
@@ -237,8 +238,6 @@ def _load_sources(workspace_root: Path) -> dict[str, _Source]:
             source_role=_optional_text(raw_source, "source_role", "workspace source"),
             original_filename=_required_text(raw_source, "original_filename", "workspace source"),
             original_path=_required_text(raw_source, "original_path", "workspace source"),
-            normalized_path=_required_text(raw_source, "normalized_path", "workspace source"),
-            sections_path=_required_text(raw_source, "sections_path", "workspace source"),
             parent_source_id=_optional_text(raw_source, "parent_source_id", "workspace source"),
         )
         # Repeated content can produce multiple source instances with one
@@ -260,95 +259,47 @@ def _resolve_reference(
         raise ReportRenderError(f"Citation references unknown source_id: {source_id}")
 
     _workspace_file(workspace_root, source.original_path, "preserved source")
-    section_id = cast("str | None", citation.get("section_id"))
-    preview = _read_preview(workspace_root, source, section_id) if section_id is not None else None
 
     return _Reference(
         number=number,
         source=source,
         page=cast("int | None", citation.get("page")),
-        preview=preview,
     )
 
 
-def _read_preview(workspace_root: Path, source: _Source, section_id: str) -> str:
-    sections_path = _workspace_file(workspace_root, source.sections_path, "section index")
-    raw_index = _read_json(sections_path, "section index")
-    raw_sections = raw_index.get("sections") if isinstance(raw_index, dict) else None
-    if not isinstance(raw_sections, list):
-        raise ReportRenderError(f"Section index has no sections list: {sections_path}")
+def _source_href(source: _Source, page: int | None) -> str:
+    href = quote(source.original_path, safe="/")
+    if page is not None and source.original_path.casefold().endswith(".pdf"):
+        return f"{href}#page={page}"
 
-    section = next(
-        (
-            value
-            for value in raw_sections
-            if isinstance(value, dict) and value.get("section_id") == section_id
-        ),
-        None,
-    )
-    if section is None:
-        raise ReportRenderError(
-            f"Citation references unknown section_id '{section_id}' for {source.source_id}"
-        )
-
-    start_line = section.get("start_line")
-    end_line = section.get("end_line")
-    if (
-        not isinstance(start_line, int)
-        or isinstance(start_line, bool)
-        or not isinstance(end_line, int)
-        or isinstance(end_line, bool)
-        or start_line < 1
-        or end_line < start_line
-    ):
-        raise ReportRenderError(f"Section '{section_id}' has invalid line bounds")
-
-    markdown_path = _workspace_file(workspace_root, source.normalized_path, "normalized source")
-    try:
-        lines = markdown_path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
-        raise ReportRenderError(f"Cannot read normalized source: {markdown_path}") from error
-    if end_line > len(lines):
-        raise ReportRenderError(f"Section '{section_id}' extends beyond its normalized source")
-
-    excerpt = "\n".join(lines[start_line - 1 : end_line])
-    if len(excerpt) <= _EXCERPT_MAX_CHARS:
-        return excerpt
-
-    return excerpt[: _EXCERPT_MAX_CHARS - len(_ELLIPSIS)] + _ELLIPSIS
+    return href
 
 
 def _format_markdown(reference: _Reference, sources: Mapping[str, _Source]) -> str:
     source = reference.source
     name = _escape_markdown(source.original_filename)
-    path = quote(source.original_path, safe="/")
-    text = f"[{name}]({path})"
+    text = f"[{name}]({_source_href(source, reference.page)})"
     if source.source_role:
         text += f" ({_escape_markdown(source.source_role)})"
     if source.parent_source_id:
         text += f", attached within {_escape_markdown(_parent_name(source, sources))}"
     if reference.page is not None:
-        text += f", p. {reference.page}"
-    if reference.preview is None:
-        return text
+        text += f", page {reference.page}"
 
-    preview = f"<blockquote><pre>{html.escape(reference.preview)}</pre></blockquote>"
-    return f"{text}\n{preview}"
+    return text
 
 
 def _format_html(reference: _Reference, sources: Mapping[str, _Source]) -> str:
     source = reference.source
-    path = html.escape(quote(source.original_path, safe="/"), quote=True)
+    href = html.escape(_source_href(source, reference.page), quote=True)
     name = html.escape(source.original_filename)
-    text = f'<a href="{path}">{name}</a>'
+    text = f'<a href="{href}">{name}</a>'
     if source.source_role:
         text += f" ({html.escape(source.source_role)})"
     if source.parent_source_id:
         text += f", attached within {html.escape(_parent_name(source, sources))}"
     if reference.page is not None:
-        text += f", p. {reference.page}"
-    if reference.preview is not None:
-        text += f"<blockquote><pre>{html.escape(reference.preview)}</pre></blockquote>"
+        text += f", page {reference.page}"
 
     return text
 

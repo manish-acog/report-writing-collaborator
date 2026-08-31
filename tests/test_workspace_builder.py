@@ -395,10 +395,10 @@ def test_renders_promoted_attachment_citation(tmp_path: Path) -> None:
     )
 
     assert (
-        f"[evidence.pdf]({child_source.original_path}), "
-        f"attached within {parent_source.original_filename}, p. 1"
+        f"[evidence.pdf]({child_source.original_path}#page=1), "
+        f"attached within {parent_source.original_filename}, page 1"
     ) in result
-    assert "<blockquote><pre>" in result
+    assert "<blockquote>" not in result
 
 
 def test_expands_nested_supported_attachments(tmp_path: Path) -> None:

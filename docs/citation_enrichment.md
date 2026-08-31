@@ -137,4 +137,12 @@ attached within [parent's name]" — one mechanism, not two competing ones.
 Implemented in `workspace_builder.py`, `variable_config.py`, and
 `report_renderer.py`. The general-report-writing skill requests bounded
 `section_id` values, and the promoted-attachment integration test exercises
-name resolution, traceability, preview extraction, and parent lineage.
+name resolution, traceability, and parent lineage.
+
+**Superseded by `docs/citation_presentation_cleanup.md`:** the verbatim
+section preview described above (and the 400-character truncation) was
+removed from the renderer. `section_id` remains on `Citation` for the
+citation-granularity marker mechanism, but no longer drives a preview
+block; the page-jump link added later is gated on the page number and the
+source's file extension, not on `section_id`. Evidence preview is deferred
+to a future frontend.

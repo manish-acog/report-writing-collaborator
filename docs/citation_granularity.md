@@ -159,3 +159,11 @@ Implemented in `report_renderer.py` and the general-report-writing skill.
 Renderer tests cover template-order numbering, cross-field deduplication,
 adjacent multi-page markers, Markdown and HTML anchors, malformed markers,
 and hard failure for valid-looking markers that resolve out of range.
+
+**Superseded by `docs/citation_presentation_cleanup.md`:** the "unchanged
+content" and "preview blockquote" language above predates that doc, which
+removed the verbatim section preview entirely and switched references from
+`<ul>`/manual numbering to a native `<ol>`/`1. ` ordered list. The
+superscript-and-anchor mechanism this doc introduced is otherwise unchanged.
+Adjacent markers on one claim now render comma-separated
+(`<sup>1</sup>,<sup>2</sup>`), not run together.

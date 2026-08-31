@@ -82,8 +82,8 @@ def _make_workspace(tmp_path: Path, *, protocol_body: str = "Evidence from proto
     child = _write_source(
         workspace,
         "src_b",
-        "Appendix.pdf",
-        "# Appendix\nAttachment evidence.\n",
+        "Slides.pptx",
+        "# Slides\nAttachment evidence.\n",
         section_id="sec_b",
         parent_source_id="src_a",
     )
@@ -121,35 +121,29 @@ def test_render_markdown_references_are_numbered_in_first_seen_order(tmp_path: P
 
     result = render(template, values, _make_workspace(tmp_path))
 
-    child = "[Appendix.pdf](sources/src_b/original.pdf), attached within Protocol.pdf, p. 3"
-    parent = "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 2"
+    child = "[Slides.pptx](sources/src_b/original.pptx), attached within Protocol.pdf, page 3"
+    parent = "[Protocol.pdf](sources/src_a/original.pdf#page=2) (protocol), page 2"
     assert result.count(child) == 1
     assert result.count(parent) == 1
     assert result.index(child) < result.index(parent)
-    assert '<a id="ref-1"></a>\n- 1. ' + child in result
-    assert '<a id="ref-2"></a>\n- 2. ' + parent in result
-    assert "<blockquote><pre># Findings\nEvidence from protocol.</pre></blockquote>" in result
+    assert '<a id="ref-1"></a>\n1. ' + child in result
+    assert '<a id="ref-2"></a>\n2. ' + parent in result
+    assert "<blockquote>" not in result
 
 
-def test_render_html_references_use_escaped_markup(tmp_path: Path) -> None:
+def test_render_html_references_use_ordered_list_and_page_link(tmp_path: Path) -> None:
     template = _write_template(
         tmp_path, "report.html", "<h1>{{title}}</h1><div>{{references}}</div>"
     )
 
-    result = render(
-        template,
-        _VALUES,
-        _make_workspace(tmp_path, protocol_body="<script>alert('x')</script>"),
-    )
+    result = render(template, _VALUES, _make_workspace(tmp_path))
 
     assert (
-        '<ul><li id="ref-1">1. '
-        '<a href="sources/src_a/original.pdf">Protocol.pdf</a> (protocol), p. 2'
+        '<ol><li id="ref-1">'
+        '<a href="sources/src_a/original.pdf#page=2">Protocol.pdf</a> '
+        "(protocol), page 2</li></ol>"
     ) in result
-    assert (
-        "<blockquote><pre># Findings\n"
-        "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;</pre></blockquote>"
-    ) in result
+    assert "<blockquote>" not in result
 
 
 def test_render_resolves_local_markers_in_template_order(tmp_path: Path) -> None:
@@ -178,7 +172,7 @@ def test_render_resolves_local_markers_in_template_order(tmp_path: Path) -> None
 
     ref_1 = '<sup><a href="#ref-1">1</a></sup>'
     ref_2 = '<sup><a href="#ref-2">2</a></sup>'
-    assert f"First claim{ref_1}{ref_2}. Second claim{ref_1}." in result
+    assert f"First claim{ref_1},{ref_2}. Second claim{ref_1}." in result
     assert f"Conclusion claim{ref_2}." in result
     assert result.count('id="ref-1"') == 1
     assert result.count('id="ref-2"') == 1
@@ -200,10 +194,10 @@ def test_render_keeps_multi_page_evidence_distinct(tmp_path: Path) -> None:
     result = render(template, values, _make_workspace(tmp_path))
 
     assert (
-        'Two-page claim<sup><a href="#ref-1">1</a></sup><sup><a href="#ref-2">2</a></sup>.'
+        'Two-page claim<sup><a href="#ref-1">1</a></sup>,<sup><a href="#ref-2">2</a></sup>.'
     ) in result
-    assert "p. 1" in result
-    assert "p. 2" in result
+    assert "page 1" in result
+    assert "page 2" in result
 
 
 def test_render_rejects_out_of_range_marker(tmp_path: Path) -> None:
@@ -235,45 +229,21 @@ def test_render_leaves_malformed_marker_literal(tmp_path: Path) -> None:
     assert "Claim[[cite:]]." in result
 
 
-def test_render_preview_is_bounded_to_400_characters(tmp_path: Path) -> None:
-    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
-
-    result = render(
-        template, {"title": _VALUES["title"]}, _make_workspace(tmp_path, protocol_body="x" * 450)
-    )
-
-    expected_preview = "# Findings\n" + ("x" * 388) + "…"
-    assert f"<blockquote><pre>{expected_preview}</pre></blockquote>" in result
-    assert ("x" * 389) not in result
-
-
-def test_render_markdown_escapes_preview_markup(tmp_path: Path) -> None:
-    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
-
-    result = render(
-        template,
-        _VALUES,
-        _make_workspace(tmp_path, protocol_body="<script>alert('x')</script>"),
-    )
-
-    assert "<script>" not in result
-    assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in result
-
-
-def test_render_citation_without_section_has_no_preview(tmp_path: Path) -> None:
+def test_render_non_pdf_page_is_plain_text(tmp_path: Path) -> None:
     template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
     values = {
         "title": {
             "status": "found",
             "value": "Report",
-            "citations": [{"source_id": "src_a", "page": 2}],
+            "citations": [{"source_id": "src_b", "page": 7}],
         }
     }
 
     result = render(template, values, _make_workspace(tmp_path))
 
-    assert "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 2" in result
-    assert "<blockquote>" not in result
+    assert "[Slides.pptx](sources/src_b/original.pptx)" in result
+    assert "page 7" in result
+    assert "original.pptx#page=" not in result
 
 
 def test_render_no_citations_uses_fallback_text(tmp_path: Path) -> None:
@@ -300,7 +270,7 @@ def test_render_rejects_unknown_source(tmp_path: Path) -> None:
         render(template, values, _make_workspace(tmp_path))
 
 
-def test_render_rejects_unknown_section(tmp_path: Path) -> None:
+def test_render_does_not_load_section_preview(tmp_path: Path) -> None:
     template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
     values = {
         "title": {
@@ -310,8 +280,10 @@ def test_render_rejects_unknown_section(tmp_path: Path) -> None:
         }
     }
 
-    with pytest.raises(ReportRenderError, match="unknown section_id"):
-        render(template, values, _make_workspace(tmp_path))
+    result = render(template, values, _make_workspace(tmp_path))
+
+    assert "[Protocol.pdf](sources/src_a/original.pdf)" in result
+    assert "# Findings" not in result
 
 
 def test_render_rejects_missing_references_placeholder(tmp_path: Path) -> None:
