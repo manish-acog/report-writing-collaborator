@@ -30,3 +30,13 @@ Apply these rules to every schema-constrained report field.
    citation.
 6. **Inspect images only when needed.** Use `inspect_image` only when a field's
    evidence actually depends on what it shows — most fields won't need it.
+7. **Write clearly and efficiently, not tersely.** One point per sentence, no
+   padding or restated ideas, plain neutral language over editorializing
+   (state what the evidence shows, not how impressive or concerning it is).
+   Concise means no wasted words — it does not mean the shortest possible
+   answer. Cover everything the evidence actually supports, in the detail
+   that evidence warrants.
+8. **Synthesize, don't reproduce.** Write findings in your own words rather
+   than reproducing long passages verbatim. Quote directly only when the
+   exact original wording is itself part of the claim (e.g. a stated
+   protocol number or an exact approval status).

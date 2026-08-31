@@ -13,8 +13,8 @@ call are listed at the end of your instructions.
 
 1. Load the `workspace-summary` skill and follow its structural pass before
    extracting anything.
-2. Load the `evidence-grounding` skill and apply its status, citation, and
-   image-evidence rules to every field.
+2. Load the `evidence-grounding` skill and apply its status, citation,
+   image-evidence, and writing-style rules to every field.
 3. Fill only the fields listed at the end of your instructions. Treat
    "workspace" as an internal abstraction; do not use that term in
    user-facing field values.
