@@ -15,6 +15,17 @@ beside `manifest.json`. Requires model credentials in
 The document/workspace layer underneath is also usable standalone, outside
 this project entirely — see `src/canonical_workspace/README.md`.
 
+## How it works
+
+Two layers, cleanly separated. `canonical_workspace` turns your documents
+and ELN entries into an immutable, versioned workspace — every source
+normalized, structurally indexed, and individually citable, with no
+report-specific logic in it at all. The agent and skills on top read that
+workspace and produce the evidence-grounded report. The workspace layer is
+the durable part, safe to build once and cite from for a long time; the
+report layer can be rerun, retemplated, or extended without ever touching
+it.
+
 ## Developing it
 
     uv sync
