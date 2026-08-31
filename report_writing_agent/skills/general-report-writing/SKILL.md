@@ -32,3 +32,4 @@ at the end of your instructions.
    page range into one citation.
 6. Use `inspect_image` on an image only when a field's evidence actually
    depends on what it shows — most fields won't need it.
+7. Understand that "workspace" is an abstraction level meant for you, not the user who wants the report. Do not use that terminology in the report. Workspace merely contains all the data that the user provided. 

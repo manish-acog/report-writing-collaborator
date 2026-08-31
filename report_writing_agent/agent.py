@@ -252,8 +252,7 @@ def build_agent(
         model=LiteLlm(model=model),
         name="report_writing_agent",
         description=(
-            "Reads the provided documents and produces evidence-grounded output "
-            "guided by a skill."
+            "Reads the provided documents and produces evidence-grounded output guided by a skill."
         ),
         instruction=_AGENT_INSTRUCTION,
         tools=tools,
