@@ -10,12 +10,12 @@ project's own report generation.
 
 ```text
 sources                     canonical_workspace/<id>/<version>/
-┌─────────────┐             ┌────────────────────────────────┐
-│ protocol.pdf│──normalize──▶│ manifest.json                  │
-│ appendix.docx│─normalize──▶│ sources/   (preserved originals)│
-│ Benchling ID │──fetch─────▶│ normalized/(Markdown + sections)│
-│  entry      │             │ assets/    (images, attachments)│
-└─────────────┘             └────────────────────────────────┘
+┌─────────────┐              ┌────────────────────────────────┐
+│ file.pdf.   │─normalize──▶ │ manifest.json                  │
+│ file.docx   │─normalize──▶ │ sources/  (preserved originals)│
+│ ELN ID      │──fetch─────▶ │ normalized/(Markdown+sections) │
+│  entry      │              │ assets/   (images, attachments)│
+└─────────────┘              └────────────────────────────────┘
                                         │
                               atomic publish, immutable once written
                               workspace_version: 1 ─▶ 2 ─▶ 3 ...
