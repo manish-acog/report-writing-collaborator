@@ -17,14 +17,18 @@ this project entirely — see `src/canonical_workspace/README.md`.
 
 ## How it works
 
-Two layers, cleanly separated. `canonical_workspace` turns your documents
-and ELN entries into an immutable, versioned workspace — every source
-normalized, structurally indexed, and individually citable, with no
-report-specific logic in it at all. The agent and skills on top read that
-workspace and produce the evidence-grounded report. The workspace layer is
-the durable part, safe to build once and cite from for a long time; the
-report layer can be rerun, retemplated, or extended without ever touching
-it.
+1. **Build a workspace.** Every document and ELN entry is normalized to
+   Markdown, structurally indexed, and published as one immutable,
+   versioned workspace — the durable evidence base, safe to cite from
+   indefinitely.
+2. **Run a skill.** An agent reads the workspace through a skill's
+   instructions, filling each requested field with either a grounded,
+   cited value or an explicit "not found" — never a guess.
+3. **Render the report.** Every citation resolves to a numbered
+   reference linking back to its exact source and page.
+
+A new template or a different model reruns steps 2 and 3 only; the
+workspace built in step 1 never changes.
 
 ## Developing it
 
