@@ -22,8 +22,9 @@ skill pays for real domain content on top of it.
 Four things, three of them new:
 
 - **`general-report-writing` skill** — content only, no logic.
-  - `SKILL.md` — instructions: load `workspace-summary` first for structural
-    understanding, then extract each `variables.json` field under its schema.
+  - `SKILL.md` — instructions: load `workspace-summary` for structural
+    understanding, load `evidence-grounding`, then extract each
+    `variables.json` field under its schema.
   - `variables.json` — one `call_groups` entry (`title`, `executive_summary`,
     `key_findings`, `conclusion`), shaped identically to a multi-group config
     so scaling up later is additive, not a rewrite.
@@ -63,11 +64,11 @@ the workspace, same immutability rule as everything else here.
 ## Scenarios
 
 **Write a report on this workspace.** User asks to turn a workspace into a
-report. The agent's description-driven routing loads `workspace-summary`
-first, building the structural picture, then loads `general-report-writing`.
-The orchestration driver reads its `variables.json`, builds the schema for its
-one `call_group`, runs one bounded call with the workspace tools plus that
-schema. The model returns four fields, each `{status, value?, citations?}`.
+report. The orchestration driver loads `general-report-writing`, exposes
+`workspace-summary` and `evidence-grounding` through its `SkillToolset`, reads
+`variables.json`, builds the schema for its one `call_group`, and runs one
+bounded call with the workspace tools plus that schema. The model returns four
+fields, each `{status, value?, citations?}`.
 The driver hands the completed map to `report_renderer` against
 `templates/report.md` (the default when no format was requested). The result
 is deterministic, injected text — no model involvement past extraction.

@@ -214,7 +214,7 @@ def test_render_rejects_out_of_range_marker(tmp_path: Path) -> None:
         render(template, values, _make_workspace(tmp_path))
 
 
-def test_render_leaves_malformed_marker_literal(tmp_path: Path) -> None:
+def test_render_rejects_malformed_marker(tmp_path: Path) -> None:
     template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
     values = {
         "title": {
@@ -224,9 +224,8 @@ def test_render_leaves_malformed_marker_literal(tmp_path: Path) -> None:
         }
     }
 
-    result = render(template, values, _make_workspace(tmp_path))
-
-    assert "Claim[[cite:]]." in result
+    with pytest.raises(ReportRenderError, match=r"Unresolved citation marker.*title"):
+        render(template, values, _make_workspace(tmp_path))
 
 
 def test_render_non_pdf_page_is_plain_text(tmp_path: Path) -> None:

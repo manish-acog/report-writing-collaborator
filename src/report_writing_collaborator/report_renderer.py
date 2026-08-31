@@ -1,8 +1,9 @@
 """Renders a completed value map into final report text via one template.
 
 Pure function: no model access, no state. See docs/general_report_writing.md,
-docs/citation_enrichment.md, docs/citation_granularity.md, and
-docs/citation_presentation_cleanup.md for the design.
+docs/citation_enrichment.md, docs/citation_granularity.md,
+docs/citation_presentation_cleanup.md, and
+docs/citation_marker_enforcement.md for the design.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 _CITATION_MARKER_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
 _CITATION_MARKER_RUN_PATTERN = re.compile(r"(?:\[\[cite:\d+\]\])+")
+_CITATION_MARKER_TOKEN = "cite:"
 _REFERENCES_KEY = "references"
 _NOT_FOUND_FALLBACK = "Not addressed in the available evidence."
 _NO_CITATIONS_MARKDOWN = "_No cited sources._"
@@ -152,7 +154,11 @@ def _render_field(
             citation_link(marker) for marker in _CITATION_MARKER_PATTERN.finditer(run.group(0))
         )
 
-    return _CITATION_MARKER_RUN_PATTERN.sub(replace, value)
+    rendered = _CITATION_MARKER_RUN_PATTERN.sub(replace, value)
+    if _CITATION_MARKER_TOKEN in rendered:
+        raise ReportRenderError(f"Unresolved citation marker in field '{field_name}'")
+
+    return rendered
 
 
 def _stringify(value: object) -> str:

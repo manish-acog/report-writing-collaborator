@@ -92,17 +92,24 @@ def _make_workspace(root: Path) -> Path:
     return root
 
 
-def test_build_bounded_agent_has_schema_and_structure_skill(tmp_path: Path) -> None:
+def test_build_bounded_agent_has_schema_and_shared_skills(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path / "workspace")
     skills_dir = tmp_path / "skills"
     structure_skill = load_skill_from_dir(
         _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
     )
+    grounding_skill = load_skill_from_dir(
+        _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    )
     config = load_variables_config(_make_report_skill(skills_dir) / "variables.json")
     schema = build_output_schema(config.call_groups[0])
 
     agent = report_orchestrator._build_bounded_agent(
-        workspace, "anthropic/claude-sonnet-5", schema, "do the extraction", structure_skill
+        workspace,
+        "anthropic/claude-sonnet-5",
+        schema,
+        "do the extraction",
+        [structure_skill, grounding_skill],
     )
 
     assert agent.output_schema is schema
@@ -116,7 +123,10 @@ def test_build_bounded_agent_has_schema_and_structure_skill(tmp_path: Path) -> N
         "SkillToolset",
     }
     skill_toolset = next(tool for tool in agent.tools if isinstance(tool, SkillToolset))
-    assert [skill.frontmatter.name for skill in skill_toolset.skills] == ["workspace-summary"]
+    assert [skill.frontmatter.name for skill in skill_toolset.skills] == [
+        "workspace-summary",
+        "evidence-grounding",
+    ]
 
 
 def test_build_instruction_combines_skill_body_and_field_list(tmp_path: Path) -> None:
@@ -131,11 +141,23 @@ def test_build_instruction_combines_skill_body_and_field_list(tmp_path: Path) ->
     assert "**conclusion**: Conclusion." in instruction
 
 
+def test_general_report_skill_loads_shared_grounding_rules() -> None:
+    general_skill = load_skill_from_dir(report_orchestrator.SKILLS_DIR / "general-report-writing")
+    grounding_skill = load_skill_from_dir(report_orchestrator.SKILLS_DIR / "evidence-grounding")
+    grounding_text = " ".join(grounding_skill.instructions.split())
+    assert "`evidence-grounding`" in general_skill.instructions
+    assert "`[[cite:N]]`" not in general_skill.instructions
+    assert "`[[cite:N]]`" in grounding_text
+    assert "more than one citation" in grounding_text
+    assert "one `Citation` per page" in grounding_text
+
+
 def test_write_report_merges_call_groups_and_renders(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "skills"
     _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
     _make_report_skill(skills_dir)
     workspace = _make_workspace(tmp_path / "workspace")
     monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)

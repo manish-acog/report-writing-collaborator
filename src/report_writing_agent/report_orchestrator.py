@@ -35,6 +35,7 @@ _DEFAULT_TEMPLATE_NAME = "report.md"
 _VARIABLES_FILE_NAME = "variables.json"
 _TEMPLATES_DIR_NAME = "templates"
 _STRUCTURE_SKILL_NAME = "workspace-summary"
+_GROUNDING_SKILL_NAME = "evidence-grounding"
 _EXTRACTOR_AGENT_NAME = "report_field_extractor"
 _OUTPUT_KEY = "result"
 _RUNNER_APP_NAME = "report_orchestrator"
@@ -64,14 +65,17 @@ def write_report(
 
     skill_dir = SKILLS_DIR / skill_name
     skill = load_skill_from_dir(skill_dir)
-    structure_skill = load_skill_from_dir(SKILLS_DIR / _STRUCTURE_SKILL_NAME)
+    shared_skills = [
+        load_skill_from_dir(SKILLS_DIR / _STRUCTURE_SKILL_NAME),
+        load_skill_from_dir(SKILLS_DIR / _GROUNDING_SKILL_NAME),
+    ]
     config = load_variables_config(skill_dir / _VARIABLES_FILE_NAME)
 
     values: dict[str, dict] = {}
     for call_group in config.call_groups:
         schema = build_output_schema(call_group)
         instruction = _build_instruction(skill, call_group)
-        agent = _build_bounded_agent(workspace_root, model, schema, instruction, structure_skill)
+        agent = _build_bounded_agent(workspace_root, model, schema, instruction, shared_skills)
         values.update(_run_bounded_call(agent))
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
@@ -90,11 +94,11 @@ def _build_bounded_agent(
     model: str,
     output_schema: type[BaseModel],
     instruction: str,
-    structure_skill: Skill,
+    shared_skills: list[Skill],
 ) -> LlmAgent:
     tools: list[object] = [
         *make_workspace_tools(workspace_root, agent_model=model),
-        SkillToolset(skills=[structure_skill]),
+        SkillToolset(skills=shared_skills),
     ]
     return LlmAgent(
         model=LiteLlm(model=model),
