@@ -152,6 +152,30 @@ def test_general_report_skill_loads_shared_grounding_rules() -> None:
     assert "one `Citation` per page" in grounding_text
 
 
+def test_academic_report_skill_loads_shared_skills_and_imrad_fields() -> None:
+    academic_skill = load_skill_from_dir(report_orchestrator.SKILLS_DIR / "academic-report")
+    config = load_variables_config(
+        report_orchestrator.SKILLS_DIR / "academic-report" / "variables.json"
+    )
+
+    assert "`workspace-summary`" in academic_skill.instructions
+    assert "`evidence-grounding`" in academic_skill.instructions
+    assert "results" in academic_skill.instructions.lower()
+    assert "discussion" in academic_skill.instructions.lower()
+    assert len(config.call_groups) == 1
+    field_names = [variable.name for variable in config.call_groups[0].variables]
+    assert field_names == [
+        "title",
+        "abstract",
+        "introduction",
+        "methods",
+        "results",
+        "discussion",
+        "conclusion",
+    ]
+    build_output_schema(config.call_groups[0])
+
+
 def test_write_report_merges_call_groups_and_renders(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

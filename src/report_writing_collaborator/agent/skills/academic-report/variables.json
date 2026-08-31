@@ -1,0 +1,44 @@
+{
+  "call_groups": [
+    {
+      "name": "report_fields",
+      "variables": [
+        {
+          "name": "title",
+          "variable_type": "text",
+          "description": "A short, specific title for this report, drawn from what the workspace's sources are actually about."
+        },
+        {
+          "name": "abstract",
+          "variable_type": "text",
+          "description": "A brief, self-contained summary covering the aims, methods, key results, and conclusion — understandable without reading the rest of the report."
+        },
+        {
+          "name": "introduction",
+          "variable_type": "text",
+          "description": "Background context, the question or problem addressed, and its significance."
+        },
+        {
+          "name": "methods",
+          "variable_type": "text",
+          "description": "How the work was conducted, in traceable detail — e.g. the dosing regimen, experimental design, or procedure the sources describe."
+        },
+        {
+          "name": "results",
+          "variable_type": "text",
+          "description": "Findings, stated objectively — no interpretation here; what they mean belongs in discussion."
+        },
+        {
+          "name": "discussion",
+          "variable_type": "text",
+          "description": "What the results mean, their limitations, and how they relate back to the introduction's stated question or problem."
+        },
+        {
+          "name": "conclusion",
+          "variable_type": "text",
+          "description": "A summary of what the results established and its implications, referring back to the introduction's stated purpose. Introduces no claim the results didn't already support."
+        }
+      ]
+    }
+  ]
+}
