@@ -1,11 +1,11 @@
 ---
 name: general-report-writing
-description: Writes a structured report — title, executive summary, key findings, and conclusion — from a published document workspace, with every field either grounded and cited or explicitly marked not found. Use when asked to write, draft, produce, or generate a report from a workspace, as opposed to a free-form summary.
+description: Writes a structured report — title, executive summary, key findings, and conclusion — from the provided documents, with every field either grounded and cited or explicitly marked not found. Use when asked to write, draft, produce, or generate a report from source material, as opposed to a free-form summary.
 ---
 
 # General Report Writing
 
-Write a structured report from a published, read-only document workspace,
+Write a structured report from the provided documents,
 grounded in evidence. This skill runs as a series of bounded extraction
 calls, one per field group; the fields for this particular call are listed
 at the end of your instructions.
@@ -13,10 +13,10 @@ at the end of your instructions.
 ## Steps
 
 1. Load the `workspace-summary` skill and follow its structural pass to
-   build a picture of the workspace's sources, roles, and images before
-   extracting anything — a report is only as trustworthy as the
-   understanding it's built on.
-2. For each field you're asked for, decide whether the workspace supports
+   build a picture of the sources, roles, and images before extracting
+   anything — a report is only as trustworthy as the understanding it's
+   built on.
+2. For each field you're asked for, decide whether the source material supports
    an answer. A field with no supporting evidence gets `not_found` — never
    invent a value to fill a placeholder; an absent field says more than a
    fabricated one.

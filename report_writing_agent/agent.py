@@ -41,8 +41,8 @@ _VISION_IMAGE_TYPES = {
     ".webp": "webp",
 }
 _AGENT_INSTRUCTION = (
-    "You help produce evidence-grounded output from a published, read-only "
-    "document workspace. Use glob_workspace and grep_workspace to find "
+    "You help produce evidence-grounded output from the provided documents. "
+    "Use glob_workspace and grep_workspace to find "
     "relevant content, and read_workspace_file to pull exact text before "
     "making any claim. Use inspect_image to ask a vision model about a "
     "chart, figure, or scanned page. Load a skill with load_skill and "
@@ -252,8 +252,8 @@ def build_agent(
         model=LiteLlm(model=model),
         name="report_writing_agent",
         description=(
-            "Reads a published document workspace and produces evidence-grounded "
-            "output guided by a skill."
+            "Reads the provided documents and produces evidence-grounded output "
+            "guided by a skill."
         ),
         instruction=_AGENT_INSTRUCTION,
         tools=tools,
