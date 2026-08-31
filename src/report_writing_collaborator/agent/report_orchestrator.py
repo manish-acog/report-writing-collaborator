@@ -20,8 +20,8 @@ from google.adk.skills import load_skill_from_dir
 from google.adk.tools.skill_toolset import SkillToolset
 from google.genai import types as genai_types
 
-from report_writing_agent.agent import DEFAULT_MODEL, SKILLS_DIR, make_workspace_tools
 from report_writing_collaborator import build_output_schema, load_variables_config, render
+from report_writing_collaborator.agent.agent import DEFAULT_MODEL, SKILLS_DIR, make_workspace_tools
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -90,7 +90,7 @@ None blocking.
 
 ## Implementation
 
-Implemented in `src/report_writing_agent/skills/evidence-grounding/SKILL.md`
+Implemented in `src/report_writing_collaborator/agent/skills/evidence-grounding/SKILL.md`
 and `report_renderer._render_field`. The instruction moved to the shared
 skill per `docs/evidence_grounding_skill.md`; the renderer check remains
 shared enforcement for every report-writing skill.

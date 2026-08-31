@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from google.adk.tools.skill_toolset import SkillToolset
 
-from report_writing_agent.agent import build_agent, make_workspace_tools
+from report_writing_collaborator.agent.agent import build_agent, make_workspace_tools
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -112,7 +112,7 @@ def test_inspect_image_returns_description(tmp_path: Path, monkeypatch: pytest.M
     )
 
     with patch(
-        "report_writing_agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.completion",
         return_value=_fake_response("A line chart trending upward."),
     ) as completion:
         result = inspect_image("assets/src_a/images/pic.png", question="What trend is shown?")
@@ -132,7 +132,7 @@ def test_inspect_image_uses_default_question_when_omitted(tmp_path: Path) -> Non
     _, _, _, inspect_image = make_workspace_tools(workspace)
 
     with patch(
-        "report_writing_agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.completion",
         return_value=_fake_response("A generic description."),
     ) as completion:
         inspect_image("assets/src_a/images/pic.png")
@@ -178,7 +178,7 @@ def test_inspect_image_reports_model_call_failure(tmp_path: Path) -> None:
     _, _, _, inspect_image = make_workspace_tools(workspace)
 
     with patch(
-        "report_writing_agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.completion",
         side_effect=RuntimeError("timed out"),
     ):
         result = inspect_image("assets/src_a/images/pic.png")
@@ -197,7 +197,7 @@ def test_inspect_image_prefers_vision_model_env_override(
     )
 
     with patch(
-        "report_writing_agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.completion",
         return_value=_fake_response("described"),
     ) as completion:
         result = inspect_image("assets/src_a/images/pic.png")

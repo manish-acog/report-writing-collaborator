@@ -20,7 +20,7 @@ _DEFAULT_TEMPLATE = "report.md"
 _WORKSPACE_ROOT_ENV = "WORKSPACE_ROOT"
 _BENCHLING_API_KEY_ENV = "BENCHLING_API_KEY"
 _BENCHLING_URL_ENV = "BENCHLING_URL"
-_ENV_PATH = Path("src/report_writing_agent/.env")
+_ENV_PATH = Path("src/report_writing_collaborator/agent/.env")
 _WORKSPACES_ROOT = Path(".workspaces")
 _FILE_INSTANCE_PREFIX = "file"
 _BENCHLING_INSTANCE_PREFIX = "benchling"
@@ -155,7 +155,7 @@ def _build_workspace(options: _CliOptions) -> cw.WorkspaceManifest:
 
 
 def _write_report(options: _CliOptions, manifest: cw.WorkspaceManifest) -> _RunResult:
-    from report_writing_agent import report_orchestrator
+    from report_writing_collaborator.agent import report_orchestrator
 
     workspace_dir = _WORKSPACES_ROOT / manifest.workspace_id / str(manifest.workspace_version)
     report = report_orchestrator.write_report(
@@ -202,9 +202,11 @@ def _handle_error(error: Exception, options: _CliOptions) -> None:
     message = str(error) or error.__class__.__name__
     suggestion = "fix the input or credentials and run again"
     if "benchling_api_key" in message or "Benchling" in message:
-        suggestion = "set BENCHLING_API_KEY and BENCHLING_URL in src/report_writing_agent/.env"
+        suggestion = (
+            "set BENCHLING_API_KEY and BENCHLING_URL in src/report_writing_collaborator/agent/.env"
+        )
     elif "API key" in message or "credential" in message.lower() or "auth" in message.lower():
-        suggestion = "fill src/report_writing_agent/.env with model credentials"
+        suggestion = "fill src/report_writing_collaborator/agent/.env with model credentials"
 
     _fail(message, suggestion=suggestion, options=options)
 
@@ -229,7 +231,9 @@ def main(
     ] = None,
     skill: Annotated[
         str,
-        typer.Option("--skill", help="Report skill under src/report_writing_agent/skills."),
+        typer.Option(
+            "--skill", help="Report skill under src/report_writing_collaborator/agent/skills."
+        ),
     ] = _DEFAULT_SKILL,
     template: Annotated[
         str,

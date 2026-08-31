@@ -39,7 +39,7 @@ def test_main_persists_report_in_workspace(
     with (
         patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch(
-            "report_writing_agent.report_orchestrator.write_report",
+            "report_writing_collaborator.agent.report_orchestrator.write_report",
             return_value="# Persisted report\n",
         ),
     ):

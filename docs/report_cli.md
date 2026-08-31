@@ -5,7 +5,7 @@
 Defines a real, ship-quality command that builds a workspace from arbitrary
 inputs and writes a rendered report — distinct from `scripts/smoke_test_report.py`,
 which stays a dev-only smoke test. For whoever implements
-`src/report_writing_agent/cli/main.py`. Follows `aganitha-cli-writing`.
+`src/report_writing_collaborator/cli/main.py`. Follows `aganitha-cli-writing`.
 
 ## Why
 
@@ -20,7 +20,7 @@ One Typer app, one command — not a multi-group CLI. There's exactly one real
 operation today (build, then generate); `aganitha-cli-writing`'s subcommand
 structure is for a project with several operations, which this isn't yet.
 
-- **`src/report_writing_agent/cli/main.py`** — thin handler: validate flags,
+- **`src/report_writing_collaborator/cli/main.py`** — thin handler: validate flags,
   build the source list, call `rwc.build_workspace` then
   `report_orchestrator.write_report`, format the result. No business logic
   beyond that — both calls already exist and are unchanged by this.
@@ -119,7 +119,7 @@ None blocking.
 
 ## Next
 
-Implement `src/report_writing_agent/cli/main.py`, add `rich` to
+Implement `src/report_writing_collaborator/cli/main.py`, add `rich` to
 `pyproject.toml` dependencies, wire `[project.scripts]`, verify `--help`
 at the command level shows the examples block correctly (run it, don't
 assume the framework renders it as written).

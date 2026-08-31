@@ -29,7 +29,7 @@ alongside `workspace-summary` — independent of it, not layered on top of it:
 one covers understanding the workspace, the other covers how to cite what
 you found in it.
 
-- **`src/report_writing_agent/skills/evidence-grounding/SKILL.md`** — the
+- **`src/report_writing_collaborator/agent/skills/evidence-grounding/SKILL.md`** — the
   found/not_found rule, the `[[cite:N]]` marker convention (placement, every
   marker backed by a real citation, index reuse for repeated evidence,
   adjacent markers for any claim needing more than one citation — not just
@@ -98,9 +98,9 @@ None blocking.
 
 ## Implementation
 
-Implemented in `src/report_writing_agent/skills/evidence-grounding/SKILL.md`,
-`src/report_writing_agent/skills/general-report-writing/SKILL.md`,
-`src/report_writing_agent/report_orchestrator.py`, and
+Implemented in `src/report_writing_collaborator/agent/skills/evidence-grounding/SKILL.md`,
+`src/report_writing_collaborator/agent/skills/general-report-writing/SKILL.md`,
+`src/report_writing_collaborator/agent/report_orchestrator.py`, and
 `report_renderer._render_field`. The orchestrator exposes both shared skills
 to each bounded agent; the general report skill tells the model to load them;
 the renderer rejects any `cite:` text left after valid marker resolution.

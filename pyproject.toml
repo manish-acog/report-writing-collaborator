@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-report-writing-agent = "report_writing_agent.cli.main:app"
+report-writing-agent = "report_writing_collaborator.cli.main:app"
 
 [dependency-groups]
 dev = [
@@ -29,7 +29,7 @@ requires = ["uv_build==0.8.15"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["canonical_workspace", "report_writing_collaborator", "report_writing_agent"]
+module-name = ["canonical_workspace", "report_writing_collaborator"]
 
 [tool.ruff]
 line-length = 100

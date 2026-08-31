@@ -7,8 +7,8 @@ from unittest.mock import patch
 from google.adk.skills import load_skill_from_dir
 from google.adk.tools.skill_toolset import SkillToolset
 
-from report_writing_agent import report_orchestrator
 from report_writing_collaborator import build_output_schema, load_variables_config
+from report_writing_collaborator.agent import report_orchestrator
 
 if TYPE_CHECKING:
     from pathlib import Path

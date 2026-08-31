@@ -13,7 +13,7 @@ wheels/
 CLAUDE.local.md
 .roles/active.md
 
-# Agent secrets (see report_writing_agent/.env.example)
+# Agent secrets (see src/report_writing_collaborator/agent/.env.example)
 .env
 
 # ADK CLI local session state (adk run/adk web)

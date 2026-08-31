@@ -3,9 +3,10 @@
 
 Builds a persistent published workspace from one PDF, runs the full
 general-report-writing pipeline against it, saves the report beside
-`manifest.json`, and prints it. Loads src/report_writing_agent/.env for
-credentials if present, so a `uv run` with no setup is enough once that
-file has real values (see src/report_writing_agent/.env.example).
+`manifest.json`, and prints it. Loads
+src/report_writing_collaborator/agent/.env for credentials if present, so
+a `uv run` with no setup is enough once that file has real values (see
+src/report_writing_collaborator/agent/.env.example).
 
 Usage:
     uv run python scripts/smoke_test_report.py
@@ -22,7 +23,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-_ENV_PATH = _REPO_ROOT / "src" / "report_writing_agent" / ".env"
+_ENV_PATH = _REPO_ROOT / "src" / "report_writing_collaborator" / "agent" / ".env"
 _DEFAULT_PDF = _REPO_ROOT / "examples" / "pdfs" / "somatosensory.pdf"
 _WORKSPACES_ROOT = _REPO_ROOT / ".workspaces"
 _SEPARATOR = "=" * 72
@@ -58,7 +59,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    # report_writing_agent builds a demo root_agent at import time (needed for
+    # report_writing_collaborator.agent.agent builds a demo root_agent at import time (needed for
     # `adk run`/`adk web` discovery); a placeholder unblocks the import here,
     # since the real workspace built below is passed to write_report() directly.
     # Set before _load_env so a blank WORKSPACE_ROOT= line in .env doesn't win.
@@ -66,7 +67,7 @@ def main() -> None:
     _load_env(_ENV_PATH)
 
     import canonical_workspace as cw
-    from report_writing_agent import report_orchestrator
+    from report_writing_collaborator.agent import report_orchestrator
 
     publish_root = _WORKSPACES_ROOT
     publish_root.mkdir(parents=True, exist_ok=True)

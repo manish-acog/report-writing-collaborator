@@ -32,6 +32,7 @@ Module map and decisions: `AGENTS.md` and `docs/`.
 
 Builds a workspace, runs `general-report-writing`, and writes the report
 beside `manifest.json`. Requires model credentials in
-`src/report_writing_agent/.env` — see `src/report_writing_agent/.env.example`.
+`src/report_writing_collaborator/agent/.env` — see
+`src/report_writing_collaborator/agent/.env.example`.
 
 An HTTP API and Docker packaging are planned, not yet built.
