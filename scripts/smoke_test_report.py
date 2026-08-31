@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Smoke-tests write_report() against a real PDF and a real model.
 
-Builds a throwaway published workspace from one PDF, runs the full
-general-report-writing pipeline against it, and prints the rendered report.
-Loads report_writing_agent/.env for credentials if present, so a `uv run`
-with no setup is enough once that file has real values (see
-report_writing_agent/.env.example).
+Builds a persistent published workspace from one PDF, runs the full
+general-report-writing pipeline against it, saves the report beside
+`manifest.json`, and prints it. Loads report_writing_agent/.env for
+credentials if present, so a `uv run` with no setup is enough once that
+file has real values (see report_writing_agent/.env.example).
 
 Usage:
     uv run python scripts/smoke_test_report.py
@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +24,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 _ENV_PATH = _REPO_ROOT / "report_writing_agent" / ".env"
 _DEFAULT_PDF = _REPO_ROOT / "examples" / "pdfs" / "somatosensory.pdf"
+_WORKSPACES_ROOT = _REPO_ROOT / ".workspaces"
 _SEPARATOR = "=" * 72
 
 
@@ -68,7 +68,8 @@ def main() -> None:
     import report_writing_collaborator as rwc
     from report_writing_agent import report_orchestrator
 
-    publish_root = Path(tempfile.mkdtemp(prefix="rwc_smoke_test_"))
+    publish_root = _WORKSPACES_ROOT
+    publish_root.mkdir(parents=True, exist_ok=True)
     manifest = rwc.build_workspace(
         [rwc.FileSource(path=args.pdf, source_instance_id="source_01")],
         rwc.WorkspaceConfig(publish_root=publish_root),
@@ -82,6 +83,7 @@ def main() -> None:
         template_name=args.template,
         model=args.model,
     )
+    (workspace_dir / args.template).write_text(report, encoding="utf-8")
     print(f"\n{_SEPARATOR}\n")
     print(report)
 

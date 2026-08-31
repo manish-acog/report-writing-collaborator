@@ -18,3 +18,6 @@ CLAUDE.local.md
 
 # ADK CLI local session state (adk run/adk web)
 .adk/
+
+# Local generated workspaces
+.workspaces/
