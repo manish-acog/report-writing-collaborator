@@ -10,7 +10,12 @@ dependencies = [
     "pydantic==2.13.4",
     "pymupdf==1.28.2",
     "pymupdf4llm==1.28.2",
+    "rich==15.0.0",
+    "typer==0.20.0",
 ]
+
+[project.scripts]
+report-writing-agent = "report_writing_agent.cli.main:app"
 
 [dependency-groups]
 dev = [
@@ -22,6 +27,9 @@ dev = [
 [build-system]
 requires = ["uv_build==0.8.15"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["report_writing_collaborator", "report_writing_agent"]
 
 [tool.ruff]
 line-length = 100

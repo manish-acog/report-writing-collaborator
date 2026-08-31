@@ -3,7 +3,7 @@
 ## Purpose
 
 Defines the fourth read-only workspace tool: interpreting one image asset via
-a vision-capable model. For whoever wires it into `report_writing_agent/agent.py`
+a vision-capable model. For whoever wires it into `src/report_writing_agent/agent.py`
 alongside `glob_workspace`/`grep_workspace`/`read_workspace_file`.
 
 ## Why
@@ -98,5 +98,5 @@ user, or mark the claim unresolved.
 
 ## Next
 
-Implement `inspect_image` in `report_writing_agent/agent.py`, add it to the
+Implement `inspect_image` in `src/report_writing_agent/agent.py`, add it to the
 tool list, smoke-test against one real image in an existing workspace.

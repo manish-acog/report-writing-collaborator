@@ -3,9 +3,9 @@
 
 Builds a persistent published workspace from one PDF, runs the full
 general-report-writing pipeline against it, saves the report beside
-`manifest.json`, and prints it. Loads report_writing_agent/.env for
+`manifest.json`, and prints it. Loads src/report_writing_agent/.env for
 credentials if present, so a `uv run` with no setup is enough once that
-file has real values (see report_writing_agent/.env.example).
+file has real values (see src/report_writing_agent/.env.example).
 
 Usage:
     uv run python scripts/smoke_test_report.py
@@ -20,9 +20,9 @@ import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT))
+sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-_ENV_PATH = _REPO_ROOT / "report_writing_agent" / ".env"
+_ENV_PATH = _REPO_ROOT / "src" / "report_writing_agent" / ".env"
 _DEFAULT_PDF = _REPO_ROOT / "examples" / "pdfs" / "somatosensory.pdf"
 _WORKSPACES_ROOT = _REPO_ROOT / ".workspaces"
 _SEPARATOR = "=" * 72

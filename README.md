@@ -28,10 +28,10 @@ Module map and decisions: `AGENTS.md` and `docs/`.
 
 ## Running it
 
-    uv run python scripts/smoke_test_report.py --pdf path/to/file.pdf
+    uv run report-writing-agent --file path/to/file.pdf
 
-Builds a workspace, runs `general-report-writing`, saves and prints the
-report. Requires model credentials in `report_writing_agent/.env` — see
-`report_writing_agent/.env.example`.
+Builds a workspace, runs `general-report-writing`, and writes the report
+beside `manifest.json`. Requires model credentials in
+`src/report_writing_agent/.env` — see `src/report_writing_agent/.env.example`.
 
 An HTTP API and Docker packaging are planned, not yet built.

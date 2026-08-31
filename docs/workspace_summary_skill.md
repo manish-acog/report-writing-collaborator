@@ -15,7 +15,7 @@ structure and content — not just per-source text.
 
 ## Shape
 
-One skill, one file: `report_writing_agent/skills/workspace-summary/SKILL.md`.
+One skill, one file: `src/report_writing_agent/skills/workspace-summary/SKILL.md`.
 No new tool; the rewrite only reorders and extends how the existing four tools
 (`glob_workspace`, `grep_workspace`, `read_workspace_file`, `inspect_image`)
 get used.

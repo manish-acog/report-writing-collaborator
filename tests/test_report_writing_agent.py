@@ -104,7 +104,8 @@ def _fake_response(text: str) -> object:
     return type("Response", (), {"choices": [choice]})()
 
 
-def test_inspect_image_returns_description(tmp_path: Path) -> None:
+def test_inspect_image_returns_description(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("REPORT_AGENT_VISION_MODEL", raising=False)
     workspace = _make_workspace(tmp_path)
     _, _, _, inspect_image = make_workspace_tools(
         workspace, agent_model="anthropic/claude-sonnet-5"

@@ -44,17 +44,13 @@ Four things, three of them new:
   - exposes: `render(template_path, values, workspace_root) -> str`
   - hands off: nothing — this is the terminal step
 
-- **ADK orchestration driver** (extends `report_writing_agent/`) — for each
+- **ADK orchestration driver** (extends `src/report_writing_agent/`) — for each
   `call_group` in the loaded skill's `variables.json`, builds that call's
   schema via `variable_config`, runs one bounded `LlmAgent` invocation
   (workspace tools + that schema), collects the result. Once every group
-  completes, hands the merged value map to `report_renderer`.
-  - exposes: the existing `build_agent` surface, extended to drive N bounded
-    calls instead of one
-  - hands off: a completed value map to `report_renderer`; a rendered report
-    to whatever called it
+  has run, it hands the merged value map to `report_renderer.render`.
 
-This puts the ADK-specific orchestration loop in `report_writing_agent/`
+This puts the ADK-specific orchestration loop in `src/report_writing_agent/`
 (alongside `agent.py`), and everything deterministic — schema construction,
 rendering — in `src/report_writing_collaborator/`, testable without a model.
 
@@ -181,7 +177,7 @@ markup); nothing about extraction, the schema, or the other templates changes.
 ### Deterministic modules stay ADK-agnostic
 
 - **Options:** A — put schema-building and rendering inside
-  `report_writing_agent/`, coupled to ADK types. B (chosen) — keep them in
+  `src/report_writing_agent/`, coupled to ADK types. B (chosen) — keep them in
   `src/report_writing_collaborator/`, testable without a model or ADK; only
   the orchestration loop that drives multiple bounded calls lives in the ADK
   wiring layer.
