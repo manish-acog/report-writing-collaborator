@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from canonical_workspace import ElnSource, FileSource
 from report_writing_agent.cli import main as cli_main
-from report_writing_collaborator import ElnSource, FileSource
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,7 +40,7 @@ def test_cli_builds_workspace_and_writes_report(
         return SimpleNamespace(workspace_id="ws_test", workspace_version=1)
 
     with (
-        patch("report_writing_collaborator.build_workspace", side_effect=fake_build),
+        patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch(
             "report_writing_agent.report_orchestrator.write_report",
             return_value="# Report\n",
@@ -105,7 +105,7 @@ def test_cli_json_output_is_machine_readable(
         return SimpleNamespace(workspace_id="ws_json", workspace_version=2)
 
     with (
-        patch("report_writing_collaborator.build_workspace", side_effect=fake_build),
+        patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch("report_writing_agent.report_orchestrator.write_report", return_value="done\n"),
     ):
         result = runner.invoke(cli_main.app, ["--file", str(source_file), "--json"])

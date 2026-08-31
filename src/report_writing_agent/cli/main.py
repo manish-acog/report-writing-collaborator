@@ -11,7 +11,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-import report_writing_collaborator as rwc
+import canonical_workspace as cw
 
 _PACKAGE_NAME = "report-writing-collaborator"
 _CLI_NAME = "report-writing-agent"
@@ -100,9 +100,9 @@ def _usage_error(message: str, *, no_color: bool, json_output: bool = False) -> 
     raise typer.Exit(code=2)
 
 
-def _file_sources(paths: list[Path]) -> list[rwc.FileSource]:
+def _file_sources(paths: list[Path]) -> list[cw.FileSource]:
     return [
-        rwc.FileSource(
+        cw.FileSource(
             path=path,
             source_instance_id=f"{_FILE_INSTANCE_PREFIX}_{index:0{_INSTANCE_ID_WIDTH}d}",
         )
@@ -110,9 +110,9 @@ def _file_sources(paths: list[Path]) -> list[rwc.FileSource]:
     ]
 
 
-def _eln_sources(entry_ids: list[str]) -> list[rwc.ElnSource]:
+def _eln_sources(entry_ids: list[str]) -> list[cw.ElnSource]:
     return [
-        rwc.ElnSource(
+        cw.ElnSource(
             entry_id=entry_id,
             source_instance_id=f"{_BENCHLING_INSTANCE_PREFIX}_{index:0{_INSTANCE_ID_WIDTH}d}",
         )
@@ -137,16 +137,16 @@ def _check_inputs(options: _CliOptions) -> None:
             )
 
 
-def _build_workspace(options: _CliOptions) -> rwc.WorkspaceManifest:
-    sources: list[rwc.FileSource | rwc.ElnSource] = [
+def _build_workspace(options: _CliOptions) -> cw.WorkspaceManifest:
+    sources: list[cw.FileSource | cw.ElnSource] = [
         *_file_sources(options.files),
         *_eln_sources(options.benchling_entry_ids),
     ]
     _WORKSPACES_ROOT.mkdir(parents=True, exist_ok=True)
 
-    return rwc.build_workspace(
+    return cw.build_workspace(
         sources,
-        rwc.WorkspaceConfig(
+        cw.WorkspaceConfig(
             publish_root=_WORKSPACES_ROOT,
             benchling_api_key=os.environ.get(_BENCHLING_API_KEY_ENV),
             benchling_url=os.environ.get(_BENCHLING_URL_ENV),
@@ -154,7 +154,7 @@ def _build_workspace(options: _CliOptions) -> rwc.WorkspaceManifest:
     )
 
 
-def _write_report(options: _CliOptions, manifest: rwc.WorkspaceManifest) -> _RunResult:
+def _write_report(options: _CliOptions, manifest: cw.WorkspaceManifest) -> _RunResult:
     from report_writing_agent import report_orchestrator
 
     workspace_dir = _WORKSPACES_ROOT / manifest.workspace_id / str(manifest.workspace_version)

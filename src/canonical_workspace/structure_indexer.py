@@ -6,15 +6,15 @@ from dataclasses import dataclass, field
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
-from report_writing_collaborator.exceptions import StructureIndexingError
+from canonical_workspace.exceptions import StructureIndexingError
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from report_writing_collaborator.document_normalizer import NormalizedDocument, PageMapping
+    from canonical_workspace.document_normalizer import NormalizedDocument, PageMapping
 
 _PACKAGE_NAME = "report-writing-collaborator"
-_INDEXER_NAME = "report_writing_collaborator.structure_indexer"
+_INDEXER_NAME = "canonical_workspace.structure_indexer"
 _SECTION_ID_LENGTH = 12
 _ATX_HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*$")
 _FENCE_MARKER = re.compile(r"^ {0,3}(`{3,}|~{3,})")

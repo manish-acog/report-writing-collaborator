@@ -65,14 +65,14 @@ def main() -> None:
     os.environ["WORKSPACE_ROOT"] = os.environ.get("WORKSPACE_ROOT") or str(_REPO_ROOT)
     _load_env(_ENV_PATH)
 
-    import report_writing_collaborator as rwc
+    import canonical_workspace as cw
     from report_writing_agent import report_orchestrator
 
     publish_root = _WORKSPACES_ROOT
     publish_root.mkdir(parents=True, exist_ok=True)
-    manifest = rwc.build_workspace(
-        [rwc.FileSource(path=args.pdf, source_instance_id="source_01")],
-        rwc.WorkspaceConfig(publish_root=publish_root),
+    manifest = cw.build_workspace(
+        [cw.FileSource(path=args.pdf, source_instance_id="source_01")],
+        cw.WorkspaceConfig(publish_root=publish_root),
     )
     workspace_dir = publish_root / manifest.workspace_id / str(manifest.workspace_version)
     print(f"Workspace: {workspace_dir}")

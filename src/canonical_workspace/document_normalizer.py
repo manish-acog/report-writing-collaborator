@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 import pymupdf
 import pymupdf4llm
 
-from report_writing_collaborator.exceptions import (
+from canonical_workspace.exceptions import (
     DocumentConversionError,
     DocumentNormalizationError,
     DocumentParseError,

@@ -84,6 +84,11 @@ For an interactive chat session with the agent instead of a scripted run:
 An HTTP API and Docker packaging are planned, not yet built.
 ```
 
+**Superseded by `docs/canonical_workspace_extraction.md`:** the code sample
+above imports `report_writing_collaborator as rwc`. `build_workspace`,
+`FileSource`, and `WorkspaceConfig` moved to `canonical_workspace`; the
+shipped README uses `import canonical_workspace as cw` instead.
+
 ## Not doing
 
 - **Makefile** — not requested this turn; the README documents real `uv`

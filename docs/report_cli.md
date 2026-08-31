@@ -28,6 +28,10 @@ structure is for a project with several operations, which this isn't yet.
   - hands off: nothing new — same two functions every other entry point
     already calls
 
+**Superseded by `docs/canonical_workspace_extraction.md`:** `build_workspace`
+moved to `canonical_workspace`; the shipped CLI calls `cw.build_workspace`,
+not `rwc.build_workspace`.
+
 ## State
 
 Same as `scripts/smoke_test_report.py` already established: workspaces

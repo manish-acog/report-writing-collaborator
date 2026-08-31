@@ -15,7 +15,7 @@ from urllib.request import urlopen
 from benchling_sdk.auth.api_key_auth import ApiKeyAuth
 from benchling_sdk.benchling import Benchling
 
-from report_writing_collaborator.document_normalizer import (
+from canonical_workspace.document_normalizer import (
     EmbeddedFile,
     FileHashes,
     MetadataValue,
@@ -23,7 +23,7 @@ from report_writing_collaborator.document_normalizer import (
     Tooling,
     make_source_id,
 )
-from report_writing_collaborator.exceptions import (
+from canonical_workspace.exceptions import (
     ElnAuthenticationError,
     ElnFetchError,
     ElnNormalizationError,
@@ -37,7 +37,7 @@ _SOURCE_PREFIX = "src_"
 _SOURCE_ID_LENGTH = 12
 _SOURCE_TYPE = "eln"
 _PACKAGE_NAME = "report-writing-collaborator"
-_NORMALIZER_NAME = "report_writing_collaborator.eln_normalizer"
+_NORMALIZER_NAME = "canonical_workspace.eln_normalizer"
 _HASH_CHUNK_SIZE = 1024 * 1024
 _DOWNLOAD_TIMEOUT_SECONDS = 60
 _IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff")

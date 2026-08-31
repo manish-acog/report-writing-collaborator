@@ -6,13 +6,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from report_writing_collaborator import (
+from canonical_workspace import (
     ElnFetchError,
     ElnNormalizationError,
     ElnNormalizer,
     ElnSource,
 )
-from report_writing_collaborator.eln_normalizer import (
+from canonical_workspace.eln_normalizer import (
     BenchlingFormatter,
     download_external_files_for_entry,
 )
@@ -110,15 +110,15 @@ def test_normalize_entry_produces_normalized_document(tmp_path: Path) -> None:
 
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
             return_value=entry,
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            "canonical_workspace.eln_normalizer.fetch_external_file_links_for_entry",
             return_value={},
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            "canonical_workspace.eln_normalizer.download_external_files_for_entry",
             return_value={},
         ),
     ):
@@ -158,15 +158,15 @@ def test_normalize_entry_reports_downloads_as_embedded_files(tmp_path: Path) -> 
 
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
             return_value=entry,
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            "canonical_workspace.eln_normalizer.fetch_external_file_links_for_entry",
             return_value={},
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            "canonical_workspace.eln_normalizer.download_external_files_for_entry",
             side_effect=fake_download,
         ),
     ):
@@ -187,15 +187,15 @@ def test_normalize_entry_propagates_download_failure(tmp_path: Path) -> None:
 
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
             return_value=entry,
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            "canonical_workspace.eln_normalizer.fetch_external_file_links_for_entry",
             return_value={},
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            "canonical_workspace.eln_normalizer.download_external_files_for_entry",
             side_effect=ElnFetchError("Failed to acquire external file 'ext_1'"),
         ),
         pytest.raises(ElnFetchError, match="ext_1"),
@@ -219,7 +219,7 @@ def test_external_file_download_failure_is_fatal(tmp_path: Path) -> None:
 
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer._create_benchling_client",
+            "canonical_workspace.eln_normalizer._create_benchling_client",
             return_value=client,
         ),
         pytest.raises(ElnFetchError, match="ext_1"),
@@ -251,7 +251,7 @@ def test_external_file_requires_entry_id(tmp_path: Path) -> None:
 
 def test_normalize_entry_wraps_fetch_failure(tmp_path: Path) -> None:
     with patch(
-        "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+        "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
         side_effect=ElnFetchError("boom"),
     ):
         normalizer = ElnNormalizer(tmp_path, api_key="key", benchling_url="https://x.benchling.com")
@@ -276,15 +276,15 @@ def test_two_entries_get_distinct_source_ids(tmp_path: Path) -> None:
 
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
             side_effect=fake_fetch,
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            "canonical_workspace.eln_normalizer.fetch_external_file_links_for_entry",
             return_value={},
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            "canonical_workspace.eln_normalizer.download_external_files_for_entry",
             return_value={},
         ),
     ):

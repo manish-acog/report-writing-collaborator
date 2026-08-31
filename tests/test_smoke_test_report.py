@@ -37,7 +37,7 @@ def test_main_persists_report_in_workspace(
         return SimpleNamespace(workspace_id="ws_test", workspace_version=1)
 
     with (
-        patch("report_writing_collaborator.build_workspace", side_effect=fake_build),
+        patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch(
             "report_writing_agent.report_orchestrator.write_report",
             return_value="# Persisted report\n",

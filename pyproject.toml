@@ -29,7 +29,7 @@ requires = ["uv_build==0.8.15"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["report_writing_collaborator", "report_writing_agent"]
+module-name = ["canonical_workspace", "report_writing_collaborator", "report_writing_agent"]
 
 [tool.ruff]
 line-length = 100

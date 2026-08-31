@@ -9,23 +9,23 @@ from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from report_writing_collaborator.document_normalizer import (
+from canonical_workspace.document_normalizer import (
     DocumentNormalizer,
     SourceSpec,
     make_source_id,
     supports_document,
 )
-from report_writing_collaborator.eln_normalizer import ElnNormalizer, ElnSource
-from report_writing_collaborator.exceptions import WorkspaceBuildError
-from report_writing_collaborator.structure_indexer import StructureIndexer
+from canonical_workspace.eln_normalizer import ElnNormalizer, ElnSource
+from canonical_workspace.exceptions import WorkspaceBuildError
+from canonical_workspace.structure_indexer import StructureIndexer
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from _typeshed import DataclassInstance
 
-    from report_writing_collaborator.document_normalizer import NormalizedDocument
-    from report_writing_collaborator.structure_indexer import DocumentStructure
+    from canonical_workspace.document_normalizer import NormalizedDocument
+    from canonical_workspace.structure_indexer import DocumentStructure
 
 _MANIFEST_NAME = "manifest.json"
 _SECTIONS_NAME = "document.sections.json"

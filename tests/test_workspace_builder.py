@@ -8,15 +8,15 @@ from unittest.mock import patch
 import pymupdf
 import pytest
 
-from report_writing_collaborator import (
+from canonical_workspace import (
     DocumentNormalizer,
     ElnSource,
     FileSource,
     WorkspaceBuildError,
     WorkspaceConfig,
     build_workspace,
-    render,
 )
+from report_writing_collaborator import render
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -284,15 +284,15 @@ def test_mixed_source_workspace_dispatches_both_normalizers(tmp_path: Path) -> N
 
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
             return_value=entry,
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            "canonical_workspace.eln_normalizer.fetch_external_file_links_for_entry",
             return_value={},
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            "canonical_workspace.eln_normalizer.download_external_files_for_entry",
             return_value={},
         ),
     ):
@@ -535,15 +535,15 @@ def test_eln_mixed_attachments_promote_documents_only(tmp_path: Path) -> None:
     )
     with (
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_entry_by_identifier",
+            "canonical_workspace.eln_normalizer.fetch_entry_by_identifier",
             return_value=entry,
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.fetch_external_file_links_for_entry",
+            "canonical_workspace.eln_normalizer.fetch_external_file_links_for_entry",
             return_value={},
         ),
         patch(
-            "report_writing_collaborator.eln_normalizer.download_external_files_for_entry",
+            "canonical_workspace.eln_normalizer.download_external_files_for_entry",
             side_effect=fake_download,
         ),
     ):

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pymupdf
 import pytest
 
-from report_writing_collaborator import (
+from canonical_workspace import (
     DocumentNormalizer,
     FileHashes,
     NormalizedDocument,

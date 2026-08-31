@@ -8,11 +8,11 @@ citation-backed report, template-first — no free-form generation.
 Build a canonical workspace from your sources, then hand it to a
 report-writing skill:
 
-    import report_writing_collaborator as rwc
+    import canonical_workspace as cw
 
-    manifest = rwc.build_workspace(
-        [rwc.FileSource(path=Path("protocol.pdf"), source_instance_id="source_01")],
-        rwc.WorkspaceConfig(publish_root=Path("workspaces")),
+    manifest = cw.build_workspace(
+        [cw.FileSource(path=Path("protocol.pdf"), source_instance_id="source_01")],
+        cw.WorkspaceConfig(publish_root=Path("workspaces")),
     )
 
 See `docs/document_input_preparation.md` for the full source/workspace model.
