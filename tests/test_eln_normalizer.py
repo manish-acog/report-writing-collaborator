@@ -138,6 +138,7 @@ def test_normalize_entry_produces_normalized_document(tmp_path: Path) -> None:
     assert "# Study Entry" in markdown
     assert result.metadata["author"] == "Ada Lovelace"
     assert result.metadata["display_id"] == "EXP001"
+    assert result.metadata["name"] == "Study Entry"
     assert result.page_map == ()
     assert result.header_footer == ()
     assert result.embedded_files == ()

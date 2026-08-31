@@ -60,6 +60,7 @@ class ManifestSource:
     source_id: str
     source_instance_id: str
     source_role: str | None
+    original_filename: str
     source_type: str
     original_path: str
     normalized_path: str
@@ -88,6 +89,7 @@ class WorkspaceManifest:
 @dataclass(frozen=True, slots=True)
 class _PendingSource:
     source: FileSource | ElnSource
+    original_filename: str | None = None
     known_source_id: str | None = None
     ancestor_source_ids: frozenset[str] = frozenset()
 
@@ -159,6 +161,7 @@ def _build_in_staging(
     pending = deque(
         _PendingSource(
             source,
+            original_filename=source.path.name if isinstance(source, FileSource) else None,
             known_source_id=repeated_file_ids.get(source.source_instance_id),
         )
         for source in sources
@@ -209,6 +212,7 @@ def _build_in_staging(
                 source_id=normalized.source_id,
                 source_instance_id=normalized.source_instance_id,
                 source_role=source.source_role,
+                original_filename=_original_filename(item, normalized),
                 source_type=normalized.source_type,
                 original_path=normalized.original_path,
                 normalized_path=normalized.normalized_path,
@@ -258,6 +262,7 @@ def _build_in_staging(
                         source_instance_id=source_instance_id,
                         parent_source_id=normalized.source_id,
                     ),
+                    original_filename=attachment.original_name,
                     known_source_id=make_source_id(attachment.sha256),
                     ancestor_source_ids=child_ancestors,
                 )
@@ -276,6 +281,18 @@ def _build_in_staging(
     _validate_manifest(staging_dir, manifest)
 
     return manifest
+
+
+def _original_filename(item: _PendingSource, normalized: NormalizedDocument) -> str:
+    if item.original_filename:
+        return item.original_filename
+
+    source = item.source
+    if isinstance(source, ElnSource):
+        name = normalized.metadata.get("name")
+        return str(name).strip() if name else source.entry_id
+
+    return source.path.name
 
 
 def _attachment_instance_id(parent_instance_id: str, attachment_path: str) -> str:

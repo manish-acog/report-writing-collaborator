@@ -595,6 +595,7 @@ def _entry_metadata(entry: Mapping[str, object]) -> dict[str, MetadataValue]:
 
     return {
         "id": _optional_str(entry.get("id")),
+        "name": _optional_str(entry.get("name")),
         "display_id": _optional_str(entry.get("displayId")),
         "created_at": _optional_str(entry.get("createdAt")),
         "modified_at": _optional_str(entry.get("modifiedAt")),

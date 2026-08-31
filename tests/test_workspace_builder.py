@@ -15,6 +15,7 @@ from report_writing_collaborator import (
     WorkspaceBuildError,
     WorkspaceConfig,
     build_workspace,
+    render,
 )
 
 if TYPE_CHECKING:
@@ -67,6 +68,7 @@ def test_build_workspace_single_source(tmp_path: Path) -> None:
     assert len(manifest.sources) == 1
     assert manifest.sources[0].source_role == "protocol"
     assert manifest.sources[0].parent_source_id is None
+    assert manifest.sources[0].original_filename == "sample.pdf"
 
     published_dir = config.publish_root / manifest.workspace_id / "1"
     assert (published_dir / "manifest.json").is_file()
@@ -77,6 +79,7 @@ def test_build_workspace_single_source(tmp_path: Path) -> None:
     on_disk = json.loads((published_dir / "manifest.json").read_text(encoding="utf-8"))
     assert on_disk["workspace_id"] == manifest.workspace_id
     assert on_disk["sources"][0]["source_id"] == manifest.sources[0].source_id
+    assert on_disk["sources"][0]["original_filename"] == "sample.pdf"
 
 
 def test_build_workspace_multiple_sources_have_distinct_section_ids(tmp_path: Path) -> None:
@@ -339,6 +342,8 @@ def test_promotes_supported_attachment_and_keeps_unsupported_asset(tmp_path: Pat
     assert child_source.parent_source_id == parent_source.source_id
     assert child_source.source_role is None
     assert child_source.source_type == "pdf"
+    assert parent_source.original_filename == "parent.pdf"
+    assert child_source.original_filename == "evidence.pdf"
     assert len(manifest.assets) == 1
     assert manifest.assets[0].source_id == parent_source.source_id
     assert manifest.assets[0].path.endswith(".txt")
@@ -352,6 +357,48 @@ def test_promotes_supported_attachment_and_keeps_unsupported_asset(tmp_path: Pat
         WorkspaceConfig(publish_root=tmp_path / "published_again"),
     )
     assert repeated.sources[1].source_instance_id == child_source.source_instance_id
+
+
+def test_renders_promoted_attachment_citation(tmp_path: Path) -> None:
+    child = tmp_path / "child.pdf"
+    _make_pdf(child, "Attached Evidence")
+    parent = tmp_path / "parent.pdf"
+    _make_pdf_with_attachments(parent, "Parent", [("evidence.pdf", child.read_bytes())])
+    config = WorkspaceConfig(publish_root=tmp_path / "published")
+    manifest = build_workspace(
+        [FileSource(path=parent, source_instance_id="source_01")],
+        config,
+    )
+    parent_source, child_source = manifest.sources
+    workspace = config.publish_root / manifest.workspace_id / "1"
+    sections = json.loads((workspace / child_source.sections_path).read_text(encoding="utf-8"))
+    section_id = sections["sections"][0]["section_id"]
+    template = tmp_path / "report.md"
+    template.write_text("{{finding}}\n\n{{references}}\n", encoding="utf-8")
+
+    result = render(
+        template,
+        {
+            "finding": {
+                "status": "found",
+                "value": "Attached evidence",
+                "citations": [
+                    {
+                        "source_id": child_source.source_id,
+                        "section_id": section_id,
+                        "page": 1,
+                    }
+                ],
+            }
+        },
+        workspace,
+    )
+
+    assert (
+        f"[evidence.pdf]({child_source.original_path}), "
+        f"attached within {parent_source.original_filename}, p. 1"
+    ) in result
+    assert "<blockquote><pre>" in result
 
 
 def test_expands_nested_supported_attachments(tmp_path: Path) -> None:
@@ -507,5 +554,7 @@ def test_eln_mixed_attachments_promote_documents_only(tmp_path: Path) -> None:
 
     assert [source.source_type for source in manifest.sources] == ["eln", "pdf"]
     assert manifest.sources[1].parent_source_id == manifest.sources[0].source_id
+    assert manifest.sources[0].original_filename == "Notebook Entry"
+    assert manifest.sources[1].original_filename == "evidence.pdf"
     assert len(manifest.assets) == 1
     assert manifest.assets[0].path.endswith("microscopy.png")

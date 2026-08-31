@@ -610,6 +610,7 @@ Example:
       "source_id": "src_a82f91c43b7e",
       "source_instance_id": "source_01",
       "source_role": "protocol",
+      "original_filename": "protocol.pdf",
       "source_type": "pdf",
       "original_path": "sources/src_a82f91c43b7e/original.pdf",
       "normalized_path": "normalized/src_a82f91c43b7e/document.md",

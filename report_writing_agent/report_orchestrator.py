@@ -75,7 +75,7 @@ def write_report(
         values.update(_run_bounded_call(agent))
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
-    return render(template_path, values)
+    return render(template_path, values, workspace_root)
 
 
 def _build_instruction(skill: Skill, call_group: CallGroup) -> str:

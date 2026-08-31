@@ -20,8 +20,11 @@ at the end of your instructions.
    an answer. A field with no supporting evidence gets `not_found` — never
    invent a value to fill a placeholder; an absent field says more than a
    fabricated one.
-3. For a field you can answer, cite every `source_id` (and page number,
-   when the evidence traces to one) the value depends on. A claim without a
-   citation isn't evidence-grounded, whatever the sentence says.
+3. For a field you can answer, cite every `source_id` the value depends on.
+   Include the page number when the evidence traces to a page. When it traces
+   to one bounded section, also include that section's `section_id` from
+   `document.sections.json`; omit `section_id` for whole-document synthesis.
+   A claim without a citation isn't evidence-grounded, whatever the sentence
+   says.
 4. Use `inspect_image` on an image only when a field's evidence actually
    depends on what it shows — most fields won't need it.

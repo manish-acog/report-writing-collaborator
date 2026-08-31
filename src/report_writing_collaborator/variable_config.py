@@ -34,6 +34,7 @@ class Citation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_id: str
+    section_id: str | None = None
     page: int | None = None
 
 
@@ -155,6 +156,4 @@ def _field_type(variable: VariableDef) -> object:
     # validation rejects ("'oneOf' is not permitted"). A plain union renders
     # as `anyOf`, which is supported, and validates identically here since
     # each branch's literal `status` value still disambiguates it.
-    # found/not_found are runtime-built classes, not statically known types;
-    # ty cannot type-check a Union built from them.
-    return found | not_found  # ty: ignore[invalid-type-form]
+    return found | not_found

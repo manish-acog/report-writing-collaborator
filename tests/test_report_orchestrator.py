@@ -63,8 +63,32 @@ def _make_report_skill(skills_dir: Path) -> Path:
 
 def _make_workspace(root: Path) -> Path:
     (root / "normalized" / "src_a").mkdir(parents=True)
+    (root / "sources" / "src_a").mkdir(parents=True)
     (root / "normalized" / "src_a" / "document.md").write_text("# Title\n", encoding="utf-8")
-    (root / "manifest.json").write_text('{"workspace_id": "ws_test"}\n', encoding="utf-8")
+    (root / "normalized" / "src_a" / "document.sections.json").write_text(
+        '{"source_id": "src_a", "sections": []}\n',
+        encoding="utf-8",
+    )
+    (root / "sources" / "src_a" / "original.pdf").write_bytes(b"source")
+    (root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "workspace_id": "ws_test",
+                "sources": [
+                    {
+                        "source_id": "src_a",
+                        "source_role": "protocol",
+                        "original_filename": "Protocol.pdf",
+                        "original_path": "sources/src_a/original.pdf",
+                        "normalized_path": "normalized/src_a/document.md",
+                        "sections_path": "normalized/src_a/document.sections.json",
+                        "parent_source_id": None,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     return root
 
 
@@ -133,4 +157,4 @@ def test_write_report_merges_call_groups_and_renders(
     assert run_call.call_count == 1
     assert "# My Report" in result
     assert "Not addressed in the available evidence." in result
-    assert "src_a, p. 1" in result
+    assert "[Protocol.pdf](sources/src_a/original.pdf) (protocol), p. 1" in result

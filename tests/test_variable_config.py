@@ -134,12 +134,22 @@ def test_build_output_schema_accepts_found_with_citations(tmp_path: Path) -> Non
     result = validate_schema(
         schema,
         json.dumps(
-            {"title": {"status": "found", "value": "Report", "citations": [{"source_id": "s"}]}}
+            {
+                "title": {
+                    "status": "found",
+                    "value": "Report",
+                    "citations": [{"source_id": "s", "section_id": "sec_findings", "page": 2}],
+                }
+            }
         ),
     )
 
     assert result == {
-        "title": {"status": "found", "value": "Report", "citations": [{"source_id": "s"}]}
+        "title": {
+            "status": "found",
+            "value": "Report",
+            "citations": [{"source_id": "s", "section_id": "sec_findings", "page": 2}],
+        }
     }
 
 

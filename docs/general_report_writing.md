@@ -38,9 +38,10 @@ Four things, three of them new:
   - hands off: a schema class to the ADK orchestration driver
 
 - **`report_renderer`** (new, generic, `src/report_writing_collaborator/`) —
-  takes a completed value map (matching a built schema) and one template file;
-  produces final report text. No model access; pure function.
-  - exposes: `render(template_path, values) -> str`
+  takes a completed value map, one template file, and the published workspace;
+  produces final report text with enriched references. No model access; pure
+  function.
+  - exposes: `render(template_path, values, workspace_root) -> str`
   - hands off: nothing — this is the terminal step
 
 - **ADK orchestration driver** (extends `report_writing_agent/`) — for each
@@ -135,8 +136,8 @@ markup); nothing about extraction, the schema, or the other templates changes.
 
 - **Options:** A — the model writes citations inline in prose text; a parser
   extracts them after the fact. B (chosen) — the model returns a structured
-  `citations: [{source_id, page?}]` list alongside prose, enforced by the
-  field's schema.
+  `citations: [{source_id, section_id?, page?}]` list alongside prose,
+  enforced by the field's schema.
 - **Chose:** B.
 - **Consequences:** enforcement is real — a response missing `citations` on a
   found field doesn't parse against the schema, so it can't silently succeed.
