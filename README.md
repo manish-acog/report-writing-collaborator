@@ -5,17 +5,15 @@ citation-backed report, template-first — no free-form generation.
 
 ## Using it
 
-Build a canonical workspace from your sources, then hand it to a
-report-writing skill:
+    uv run report-writing-agent --file path/to/file.pdf
 
-    import canonical_workspace as cw
+Builds a workspace, runs `general-report-writing`, and writes the report
+beside `manifest.json`. Requires model credentials in
+`src/report_writing_collaborator/agent/.env` — see
+`src/report_writing_collaborator/agent/.env.example`.
 
-    manifest = cw.build_workspace(
-        [cw.FileSource(path=Path("protocol.pdf"), source_instance_id="source_01")],
-        cw.WorkspaceConfig(publish_root=Path("workspaces")),
-    )
-
-See `docs/document_input_preparation.md` for the full source/workspace model.
+The document/workspace layer underneath is also usable standalone, outside
+this project entirely — see `src/canonical_workspace/README.md`.
 
 ## Developing it
 
@@ -25,14 +23,5 @@ See `docs/document_input_preparation.md` for the full source/workspace model.
     uv run ty check
 
 Module map and decisions: `AGENTS.md` and `docs/`.
-
-## Running it
-
-    uv run report-writing-agent --file path/to/file.pdf
-
-Builds a workspace, runs `general-report-writing`, and writes the report
-beside `manifest.json`. Requires model credentials in
-`src/report_writing_collaborator/agent/.env` — see
-`src/report_writing_collaborator/agent/.env.example`.
 
 An HTTP API and Docker packaging are planned, not yet built.
