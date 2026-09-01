@@ -249,6 +249,85 @@ def test_write_report_merges_call_groups_and_renders(
     assert not (workspace / "report.md").exists()
 
 
+def test_write_report_persists_partial_values_before_a_later_group_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    skill_dir = _make_skill_dir(
+        skills_dir, "multi-group-report", "Writes a report.", "Extract fields."
+    )
+    (skill_dir / "variables.json").write_text(
+        json.dumps(
+            {
+                "call_groups": [
+                    {
+                        "name": "g1",
+                        "variables": [
+                            {"name": "title", "variable_type": "text", "description": "Title."}
+                        ],
+                    },
+                    {
+                        "name": "g2",
+                        "variables": [
+                            {
+                                "name": "conclusion",
+                                "variable_type": "text",
+                                "description": "Conclusion.",
+                            }
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (skill_dir / "templates").mkdir()
+    (skill_dir / "templates" / "report.md").write_text(
+        "# {{title}}\n\n{{conclusion}}\n\n{{references}}\n", encoding="utf-8"
+    )
+    workspace = _make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
+
+    responses: list[dict | Exception] = [
+        {},  # bootstrap turn (expect_output=False; return value is discarded)
+        {
+            "title": {
+                "status": "found",
+                "value": "My Report[[cite:0]]",
+                "citations": [{"source_id": "src_a", "page": 1}],
+            }
+        },
+        RuntimeError("second group failed"),
+    ]
+
+    def fake_run_bounded_call(*args: object, **kwargs: object) -> dict:
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    with (
+        patch.object(
+            report_orchestrator, "_build_session", wraps=report_orchestrator._build_session
+        ) as build_session,
+        patch.object(report_orchestrator, "_run_bounded_call", side_effect=fake_run_bounded_call),
+        pytest.raises(RuntimeError, match="second group failed"),
+    ):
+        report_orchestrator.write_report(workspace, skill_name="multi-group-report")
+
+    task_dir = build_session.call_args.args[0]
+    values = json.loads((task_dir / "values.json").read_text(encoding="utf-8"))
+    assert values == {
+        "title": {
+            "status": "found",
+            "value": "My Report[[cite:0]]",
+            "citations": [{"source_id": "src_a", "page": 1}],
+        }
+    }
+
+
 def test_rerender_task_reproduces_or_reformats_without_a_model_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

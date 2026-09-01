@@ -39,8 +39,8 @@ job alone, not something committed at generation time.
 - **`report_renderer._stringify`** — becomes type- and template-aware: a
   Markdown pipe-table renderer and an HTML `<table>` renderer for `Table`
   values, the existing passthrough unchanged for `text`.
-- **`report_orchestrator.write_report`** — after the call_group loop,
-  before calling `render()`, writes the merged `values` dict to
+- **`report_orchestrator.write_report`** — after each `call_group`'s turn
+  (not only once at the end), writes the running `values` dict to
   `.tasks/<task_id>/values.json` (directory established in
   `docs/task_run_artifacts.md`).
 - **New: a render-only path** — a function (and a CLI flag exposing it)
@@ -112,6 +112,20 @@ fields use the same `{status: "found" | "not_found"}` wrapper every
   built in memory at that point, the write is cheap. Simpler than deciding
   ahead of time whether a given run will ever need re-rendering.
 
+### `values.json` is written incrementally, not only at the end
+
+- **Options:** A (as first implemented) — one write, after the whole
+  `call_group` loop finishes. B (chosen) — overwrite `values.json` with
+  the running `values` dict after every `call_group`'s turn.
+- **Chose:** B.
+- **Consequences:** if a later `call_group` fails after retries exhaust
+  (`docs/citation_marker_retry.md`), every field extracted before that
+  point is still on disk, not lost with the in-memory `values` dict. Each
+  write is a full overwrite of current state, not an append log — cheap,
+  and `values.json` never needs reconciling from partial fragments. Not a
+  resume mechanism — `write_report()` still always starts a fresh run;
+  this only stops a late failure from discarding already-completed work.
+
 ### The render-only path is built now, not deferred
 
 - **Options:** A — persist `values.json` in this pass, leave re-rendering
@@ -150,10 +164,13 @@ without changes.
 `dict` value renders as a Markdown pipe table or an HTML `<table>`, with
 every citation appended once after it (no per-cell markers to resolve).
 
-`report_orchestrator.write_report` writes `values.json` into `task_dir`
-right after the call_group loop. New `rerender_task(task_dir,
-workspace_root, skill_name=, template_name=)` reads it back and renders
-with no model call. `cli/main.py` exposes `--rerender-task <task_id>`,
-resolving `task_dir`/`workspace_root` from that task's `task.json`
-(globbed under `.workspaces/*/.tasks/<task_id>/`); mutually exclusive with
-`--file`/`--benchling-entry-id`.
+`report_orchestrator.write_report` overwrites `values.json` in `task_dir`
+after every `call_group`'s turn, not only once at the end -- a later
+group failing after retries exhaust (`docs/citation_marker_retry.md`)
+still leaves everything extracted so far on disk. New `rerender_task(
+task_dir, workspace_root, skill_name=, template_name=)` reads it back and
+renders with no model call. `cli/main.py` exposes `--rerender-task
+<task_id>`, resolving `task_dir`/`workspace_root` from that task's
+`task.json` (globbed under `.workspaces/*/.tasks/<task_id>/`); mutually
+exclusive with `--file`/`--benchling-entry-id`. Regression test:
+`test_write_report_persists_partial_values_before_a_later_group_fails`.

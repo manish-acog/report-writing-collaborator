@@ -133,12 +133,14 @@ def write_report(
         instruction = _build_instruction(skill, call_group)
         agent = _build_bounded_agent(workspace_root, model, schema, instruction, grounding_skill)
         values.update(_run_bounded_call(agent, session_service, session_id, _EXTRACTION_PROMPT))
+        # Overwritten after every turn, not only at the end: a later
+        # call_group failing after retries exhaust still leaves everything
+        # extracted so far on disk, not lost with the in-memory dict.
+        (task_dir / _VALUES_FILE_NAME).write_text(
+            json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
     asyncio.run(session_service.close())
-
-    (task_dir / _VALUES_FILE_NAME).write_text(
-        json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
     text = render(template_path, values, workspace_root)
