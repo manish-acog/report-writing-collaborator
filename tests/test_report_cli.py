@@ -39,11 +39,15 @@ def test_cli_builds_workspace_and_writes_report(
         workspace_dir.mkdir(parents=True)
         return SimpleNamespace(workspace_id="ws_test", workspace_version=1)
 
+    fake_result = SimpleNamespace(
+        text="# Report\n",
+        report_path=workspaces_root / "ws_test" / ".tasks" / "task_1" / "custom.md",
+    )
     with (
         patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch(
             "report_writing_collaborator.agent.report_orchestrator.write_report",
-            return_value="# Report\n",
+            return_value=fake_result,
         ) as write_report,
     ):
         result = runner.invoke(
@@ -104,11 +108,14 @@ def test_cli_json_output_is_machine_readable(
         workspace_dir.mkdir(parents=True)
         return SimpleNamespace(workspace_id="ws_json", workspace_version=2)
 
+    task_report_path = workspaces_root / "ws_json" / ".tasks" / "task_2" / "report.md"
+    fake_result = SimpleNamespace(text="done\n", report_path=task_report_path)
+
     with (
         patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch(
             "report_writing_collaborator.agent.report_orchestrator.write_report",
-            return_value="done\n",
+            return_value=fake_result,
         ),
     ):
         result = runner.invoke(cli_main.app, ["--file", str(source_file), "--json"])
@@ -120,7 +127,7 @@ def test_cli_json_output_is_machine_readable(
         "data": {
             "workspace_id": "ws_json",
             "workspace_version": 2,
-            "report_path": str(workspaces_root / "ws_json" / "2" / "report.md"),
+            "report_path": str(task_report_path),
         },
     }
     assert "✓" not in result.stdout

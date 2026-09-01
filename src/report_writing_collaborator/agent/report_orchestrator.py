@@ -9,15 +9,23 @@ re-discovering the workspace. A call_group whose output fails schema
 validation (e.g. an out-of-range [[cite:N]] marker) gets one corrective
 retry, fed the validation error as a new turn, before the run gives up on
 it. Every group's results are merged and rendered against the skill's
-template. See docs/general_report_writing.md,
-docs/extraction_session_persistence.md, and docs/citation_marker_retry.md
-for the design.
+template. Everything the run produces -- the session transcript,
+provenance, and the rendered report -- is written to
+.tasks/<task_id>/, a sibling of workspace_root's numbered version
+directory; workspace_root itself is never written to. See
+docs/general_report_writing.md, docs/extraction_session_persistence.md,
+docs/citation_marker_retry.md, and docs/task_run_artifacts.md for the
+design.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from google.adk.agents import LlmAgent
@@ -51,6 +59,8 @@ _OUTPUT_KEY = "result"
 _RUNNER_APP_NAME = "report_orchestrator"
 _RUNNER_USER_ID = "report_orchestrator"
 _SESSIONS_DB_NAME = "sessions.db"
+_TASKS_DIR_NAME = ".tasks"
+_TASK_FILE_NAME = "task.json"
 # Total attempts for one call_group's turn, including the first: one
 # corrective retry on a citation-marker validation failure before giving up.
 _VALIDATION_RETRY_LIMIT = 2
@@ -63,16 +73,26 @@ _BOOTSTRAP_PROMPT = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class WriteReportResult:
+    """One write_report() run's rendered text and where it's archived."""
+
+    text: str
+    task_id: str
+    task_dir: Path
+    report_path: Path
+
+
 def write_report(
     workspace_root: Path,
     skill_name: str = "general-report-writing",
     template_name: str = _DEFAULT_TEMPLATE_NAME,
     model: str | None = None,
-) -> str:
+) -> WriteReportResult:
     """Runs a bootstrap turn, one bounded extraction call per call_group, and renders.
 
     Every turn runs against one shared, database-backed session
-    (<workspace_root>/sessions.db) so later turns see earlier ones' context.
+    (<task_dir>/sessions.db) so later turns see earlier ones' context.
 
     Args:
         workspace_root: The published workspace directory to read from.
@@ -81,10 +101,15 @@ def write_report(
         model: A LiteLLM model string. Defaults to REPORT_AGENT_MODEL.
 
     Returns:
-        The rendered report text.
+        The rendered report text and its .tasks/<task_id>/ archive location.
     """
     workspace_root = workspace_root.resolve()
     model = model or os.environ.get("REPORT_AGENT_MODEL", DEFAULT_MODEL)
+    started_at = datetime.now(UTC)
+
+    task_id = uuid.uuid4().hex
+    task_dir = workspace_root.parent / _TASKS_DIR_NAME / task_id
+    task_dir.mkdir(parents=True)
 
     skill_dir = SKILLS_DIR / skill_name
     skill = load_skill_from_dir(skill_dir)
@@ -92,7 +117,7 @@ def write_report(
     grounding_skill = load_skill_from_dir(SKILLS_DIR / _GROUNDING_SKILL_NAME)
     config = load_variables_config(skill_dir / _VARIABLES_FILE_NAME)
 
-    session_service, session_id = _build_session(workspace_root)
+    session_service, session_id = _build_session(task_dir)
 
     bootstrap_agent = _build_bootstrap_agent(workspace_root, model, structure_skill)
     _run_bounded_call(
@@ -109,18 +134,76 @@ def write_report(
     asyncio.run(session_service.close())
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
-    return render(template_path, values, workspace_root)
+    text = render(template_path, values, workspace_root)
+
+    report_path = task_dir / template_name
+    report_path.write_text(text, encoding="utf-8")
+    _write_task_metadata(
+        task_dir,
+        workspace_root=workspace_root,
+        skill_name=skill_name,
+        template_name=template_name,
+        model=model,
+        started_at=started_at,
+        completed_at=datetime.now(UTC),
+    )
+
+    return WriteReportResult(
+        text=text, task_id=task_id, task_dir=task_dir, report_path=report_path
+    )
 
 
-def _build_session(workspace_root: Path) -> tuple[DatabaseSessionService, str]:
+def _write_task_metadata(
+    task_dir: Path,
+    *,
+    workspace_root: Path,
+    skill_name: str,
+    template_name: str,
+    model: str,
+    started_at: datetime,
+    completed_at: datetime,
+) -> None:
+    workspace_id, workspace_version = _workspace_identity(workspace_root)
+    task = {
+        "workspace_id": workspace_id,
+        "workspace_version": workspace_version,
+        "skill_name": skill_name,
+        "template_name": template_name,
+        "model": model,
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
+    }
+    (task_dir / _TASK_FILE_NAME).write_text(
+        json.dumps(task, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def _workspace_identity(workspace_root: Path) -> tuple[str, int | str]:
+    """Best-effort workspace_id/workspace_version from workspace_root's own path shape.
+
+    Real runs pass <publish_root>/<workspace_id>/<version>/, where
+    workspace_version parses as int. A workspace_root that doesn't follow
+    that shape (e.g. a synthetic test fixture) records its raw directory
+    name instead of failing task.json construction.
+    """
+    workspace_id = workspace_root.parent.name
+    version_name = workspace_root.name
+    try:
+        workspace_version: int | str = int(version_name)
+    except ValueError:
+        workspace_version = version_name
+
+    return workspace_id, workspace_version
+
+
+def _build_session(task_dir: Path) -> tuple[DatabaseSessionService, str]:
     """Builds the run's shared session service and a fresh session.
 
-    Points sqlalchemy at <workspace_root>/sessions.db — sibling of
-    manifest.json, outside the hashed workspace tree. Every write_report()
-    call gets its own fresh session_id, never resumed; sessions.db
-    accumulates one row per run, independent and non-overwriting.
+    Points sqlalchemy at <task_dir>/sessions.db. Every write_report() call
+    gets its own fresh session_id, never resumed; sessions.db accumulates
+    exactly one row per run -- it lives in this run's own task_dir.
     """
-    db_path = workspace_root / _SESSIONS_DB_NAME
+    db_path = task_dir / _SESSIONS_DB_NAME
     session_service = DatabaseSessionService(db_url=f"sqlite+aiosqlite:///{db_path}")
     session = asyncio.run(
         session_service.create_session(app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID)

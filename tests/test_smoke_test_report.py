@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     import pytest
 
 
-def test_main_persists_report_in_workspace(
+def test_main_prints_report_without_writing_into_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -36,16 +36,21 @@ def test_main_persists_report_in_workspace(
         (workspace_dir / "manifest.json").write_text("{}\n", encoding="utf-8")
         return SimpleNamespace(workspace_id="ws_test", workspace_version=1)
 
+    task_report_path = workspaces_root / "ws_test" / ".tasks" / "task_1" / "report.md"
+    fake_result = SimpleNamespace(text="# Persisted report\n", report_path=task_report_path)
+
     with (
         patch("canonical_workspace.build_workspace", side_effect=fake_build),
         patch(
             "report_writing_collaborator.agent.report_orchestrator.write_report",
-            return_value="# Persisted report\n",
+            return_value=fake_result,
         ),
     ):
         smoke_test_report.main()
 
-    report_path = workspaces_root / "ws_test" / "1" / "report.md"
-    assert report_path.read_text(encoding="utf-8") == "# Persisted report\n"
-    assert (report_path.parent / "manifest.json").is_file()
-    assert "# Persisted report" in capsys.readouterr().out
+    workspace_dir = workspaces_root / "ws_test" / "1"
+    assert not (workspace_dir / "report.md").exists()
+    assert (workspace_dir / "manifest.json").is_file()
+    output = capsys.readouterr().out
+    assert str(task_report_path) in output
+    assert "# Persisted report" in output

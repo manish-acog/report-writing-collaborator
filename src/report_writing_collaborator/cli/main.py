@@ -160,15 +160,18 @@ def _write_report(options: _CliOptions, manifest: cw.WorkspaceManifest) -> _RunR
     from report_writing_collaborator.agent import report_orchestrator
 
     workspace_dir = _WORKSPACES_ROOT / manifest.workspace_id / str(manifest.workspace_version)
-    report = report_orchestrator.write_report(
+    result = report_orchestrator.write_report(
         workspace_dir,
         skill_name=options.skill,
         template_name=options.template,
         model=options.model,
     )
-    report_path = options.output or workspace_dir / options.template
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(report, encoding="utf-8")
+
+    report_path = result.report_path
+    if options.output:
+        report_path = options.output
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.text, encoding="utf-8")
 
     return _RunResult(
         workspace_id=manifest.workspace_id,

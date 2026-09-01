@@ -42,6 +42,13 @@ machinery nobody asked for.
   - hands off: the shared service + `session_id` every `Runner` built during
     the run is constructed with.
 
+> **Superseded:** `sessions.db`'s location (this State section, and the
+> "`sessions.db` sits beside `manifest.json`" Decision below) is
+> superseded by `docs/task_run_artifacts.md` — it now lives under
+> `.tasks/<task_id>/`, not inside the workspace directory at all. Kept
+> here for history; the reasoning for *why* a shared session DB exists is
+> unchanged.
+
 ## State
 
 New: `<workspace_dir>/sessions.db` (SQLite), sibling of `manifest.json`. One
@@ -117,6 +124,13 @@ where only the final rendered report survives a run.
   writes into `workspace_dir` by default (`cli/main.py:167`) — a derived
   artifact of running the agent against a workspace, not part of the
   evidence base itself.
+
+  **Superseded by `docs/task_run_artifacts.md`**: `sessions.db` no longer
+  sits beside `manifest.json` — it moved into `.tasks/<task_id>/`, alongside
+  the rest of a run's artifacts. The reasoning above (outside anything
+  `WorkspaceBuilder` hashes or versions) still holds; that doc just found
+  `manifest.json`'s sibling wasn't far enough outside the workspace tree
+  either.
 
 ### One session per `write_report()` run, never resumed or reused across runs
 

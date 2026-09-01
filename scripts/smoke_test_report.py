@@ -2,11 +2,11 @@
 """Smoke-tests write_report() against a real PDF and a real model.
 
 Builds a persistent published workspace from one PDF, runs the full
-general-report-writing pipeline against it, saves the report beside
-`manifest.json`, and prints it. Loads
-src/report_writing_collaborator/agent/.env for credentials if present, so
-a `uv run` with no setup is enough once that file has real values (see
-src/report_writing_collaborator/agent/.env.example).
+general-report-writing pipeline against it, prints where write_report()
+archived every artifact under .tasks/<task_id>/, and prints the rendered
+report itself. Loads src/report_writing_collaborator/agent/.env for
+credentials if present, so a `uv run` with no setup is enough once that
+file has real values (see src/report_writing_collaborator/agent/.env.example).
 
 Usage:
     uv run python scripts/smoke_test_report.py
@@ -78,15 +78,15 @@ def main() -> None:
     workspace_dir = publish_root / manifest.workspace_id / str(manifest.workspace_version)
     print(f"Workspace: {workspace_dir}")
 
-    report = report_orchestrator.write_report(
+    result = report_orchestrator.write_report(
         workspace_dir,
         skill_name=args.skill,
         template_name=args.template,
         model=args.model,
     )
-    (workspace_dir / args.template).write_text(report, encoding="utf-8")
+    print(f"Report: {result.report_path}")
     print(f"\n{_SEPARATOR}\n")
-    print(report)
+    print(result.text)
 
 
 if __name__ == "__main__":

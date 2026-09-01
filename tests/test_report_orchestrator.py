@@ -219,10 +219,24 @@ def test_write_report_merges_call_groups_and_renders(
         result = report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
 
     assert run_call.call_count == 2
-    assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result
-    assert "Not addressed in the available evidence." in result
-    assert "[Protocol.pdf](sources/src_a/original.pdf#page=1) (protocol), page 1" in result
-    assert (workspace / "sessions.db").exists()
+    assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result.text
+    assert "Not addressed in the available evidence." in result.text
+    assert "[Protocol.pdf](sources/src_a/original.pdf#page=1) (protocol), page 1" in result.text
+
+    assert result.task_dir == workspace.parent / ".tasks" / result.task_id
+    assert (result.task_dir / "sessions.db").exists()
+    assert result.report_path == result.task_dir / "report.md"
+    assert result.report_path.read_text(encoding="utf-8") == result.text
+
+    task = json.loads((result.task_dir / "task.json").read_text(encoding="utf-8"))
+    assert task["skill_name"] == "general-report-writing"
+    assert task["template_name"] == "report.md"
+    assert task["model"] == "anthropic/claude-sonnet-5"
+    assert task["started_at"] <= task["completed_at"]
+
+    # workspace_root itself stays untouched -- every artifact lands in .tasks/.
+    assert not (workspace / "sessions.db").exists()
+    assert not (workspace / "report.md").exists()
 
 
 def test_build_session_creates_independent_rows_across_reruns(tmp_path: Path) -> None:
