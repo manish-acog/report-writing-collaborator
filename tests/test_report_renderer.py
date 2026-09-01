@@ -276,6 +276,53 @@ def test_render_prefers_citation_url_for_eln_source(tmp_path: Path) -> None:
     assert "sources/src_c/original.json" not in result
 
 
+def test_render_table_field_as_markdown_pipe_table(tmp_path: Path) -> None:
+    template = _write_template(tmp_path, "report.md", "{{deviations}}{{references}}")
+    values = {
+        "deviations": {
+            "status": "found",
+            "value": {
+                "headers": ["Date", "Note"],
+                "rows": [["2026-01-01", "Ran assay | with a pipe"]],
+            },
+            "citations": [{"source_id": "src_a", "page": 2}],
+        }
+    }
+
+    result = render(template, values, _make_workspace(tmp_path))
+
+    assert "| Date | Note |" in result
+    assert "| --- | --- |" in result
+    assert "| 2026-01-01 | Ran assay \\| with a pipe |" in result
+    assert '<sup><a href="#ref-1">1</a></sup>' in result
+
+
+def test_render_table_field_as_html_table(tmp_path: Path) -> None:
+    template = _write_template(tmp_path, "report.html", "{{deviations}}{{references}}")
+    values = {
+        "deviations": {
+            "status": "found",
+            "value": {"headers": ["Date", "Note"], "rows": [["2026-01-01", "Ran <assay>"]]},
+            "citations": [{"source_id": "src_a", "page": 2}],
+        }
+    }
+
+    result = render(template, values, _make_workspace(tmp_path))
+
+    assert "<table><thead><tr><th>Date</th><th>Note</th></tr></thead>" in result
+    assert "<td>Ran &lt;assay&gt;</td>" in result
+    assert '<sup><a href="#ref-1">1</a></sup>' in result
+
+
+def test_render_table_field_not_found_uses_fallback(tmp_path: Path) -> None:
+    template = _write_template(tmp_path, "report.md", "{{deviations}}{{references}}")
+    values = {"deviations": {"status": "not_found"}}
+
+    result = render(template, values, _make_workspace(tmp_path))
+
+    assert "Not addressed in the available evidence." in result
+
+
 def test_render_no_citations_uses_fallback_text(tmp_path: Path) -> None:
     md_template = _write_template(tmp_path, "report.md", "{{references}}")
     html_template = _write_template(tmp_path, "report.html", "{{references}}")

@@ -21,16 +21,14 @@ from report_writing_collaborator.exceptions import VariableConfigError
 if TYPE_CHECKING:
     from pathlib import Path
 
-_MIN_CITATIONS = 1
-# Matches a report_renderer.CITATION_MARKER_PATTERN marker inside a found
-# field's value, so an out-of-range index is caught here -- one call_group's
-# turn -- instead of surviving to the end of the run.
-_CITATION_MARKER_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
 
-# variable_type -> the Python type its "found" value is typed as. Extend
-# this when a skill needs a new kind of field (e.g. a table or an image
-# reference); report_renderer then needs a matching stringifier.
-_VARIABLE_TYPES: dict[str, type] = {"text": str}
+class Table(BaseModel):
+    """A found field's table value: column headers and row data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    headers: list[str]
+    rows: list[list[str]]
 
 
 class Citation(BaseModel):
@@ -41,6 +39,39 @@ class Citation(BaseModel):
     source_id: str
     section_id: str | None = None
     page: int | None = None
+
+
+_MIN_CITATIONS = 1
+# Matches a report_renderer.CITATION_MARKER_PATTERN marker inside a found
+# field's value, so an out-of-range index is caught here -- one call_group's
+# turn -- instead of surviving to the end of the run.
+_CITATION_MARKER_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
+
+# variable_type -> the Python type its "found" value is typed as. Extend
+# this when a skill needs a new kind of field (e.g. an image reference);
+# report_renderer then needs a matching stringifier, and a
+# _FIELD_DESCRIPTIONS entry below.
+_VARIABLE_TYPES: dict[str, type] = {"text": str, "table": Table}
+
+# variable_type -> (citations field description, value field description).
+# Restates each type's marker rule next to where the model generates it,
+# not only in evidence-grounding/SKILL.md's shared prose.
+_FIELD_DESCRIPTIONS: dict[str, tuple[str, str]] = {
+    "text": (
+        "Evidence for value, in generation order. A [[cite:N]] marker "
+        "in value refers to this array's 0-based index N.",
+        "Prose with a [[cite:N]] marker after every factual claim, where "
+        "N is the 0-based index of its evidence in this field's own citations array.",
+    ),
+    "table": (
+        "Evidence for the whole table, in generation order. Unlike a text "
+        "field, no [[cite:N]] marker is placed in value -- these citations "
+        "back the table as a whole, shown once alongside it.",
+        "The table's data: column headers and row values. Never place a "
+        "[[cite:N]] marker inside a cell -- citations backs the table as a "
+        "whole, not individual cells.",
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +173,7 @@ def build_output_schema(call_group: CallGroup) -> type[BaseModel]:
 
 def _field_type(variable: VariableDef) -> object:
     python_type = _VARIABLE_TYPES[variable.variable_type]
+    citations_description, value_description = _FIELD_DESCRIPTIONS[variable.variable_type]
 
     def check_citation_markers(found: BaseModel) -> BaseModel:
         """Rejects a [[cite:N]] marker in value with no matching citations entry.
@@ -153,6 +185,9 @@ def _field_type(variable: VariableDef) -> object:
         `found`'s fields are only known at runtime -- this class is built
         fresh per variable_type below -- so its attributes are read via
         getattr rather than static access.
+
+        A table's citations back the whole field, not per-cell markers --
+        only a str value (a text field) has markers to check.
         """
         value = getattr(found, "value", None)
         if not isinstance(value, str):
@@ -185,21 +220,9 @@ def _field_type(variable: VariableDef) -> object:
         # writing prose that references it by 0-based position.
         citations=(
             list[Citation],
-            Field(
-                ...,
-                min_length=_MIN_CITATIONS,
-                description="Evidence for value, in generation order. A [[cite:N]] marker "
-                "in value refers to this array's 0-based index N.",
-            ),
+            Field(..., min_length=_MIN_CITATIONS, description=citations_description),
         ),
-        value=(
-            python_type,
-            Field(
-                ...,
-                description="Prose with a [[cite:N]] marker after every factual claim, where "
-                "N is the 0-based index of its evidence in this field's own citations array.",
-            ),
-        ),
+        value=(python_type, Field(..., description=value_description)),
         __config__=ConfigDict(extra="forbid"),
         __validators__=validators,
     )

@@ -75,7 +75,7 @@ def test_load_variables_config_rejects_unsupported_variable_type(tmp_path: Path)
             "call_groups": [
                 {
                     "name": "g",
-                    "variables": [{"name": "x", "variable_type": "table", "description": ""}],
+                    "variables": [{"name": "x", "variable_type": "image", "description": ""}],
                 }
             ]
         },
@@ -152,6 +152,57 @@ def test_build_output_schema_accepts_found_with_citations(tmp_path: Path) -> Non
         }
     }
 
+
+
+def test_build_output_schema_accepts_found_table(tmp_path: Path) -> None:
+    path = _write_config(
+        tmp_path,
+        {"call_groups": [{"name": "g", "variables": [{"name": "deviations", "variable_type": "table"}]}]},
+    )
+    schema = build_output_schema(load_variables_config(path).call_groups[0])
+
+    result = validate_schema(
+        schema,
+        json.dumps(
+            {
+                "deviations": {
+                    "status": "found",
+                    "value": {"headers": ["Date", "Note"], "rows": [["2026-01-01", "Ran assay."]]},
+                    "citations": [{"source_id": "s", "page": 3}],
+                }
+            }
+        ),
+    )
+
+    assert result == {
+        "deviations": {
+            "status": "found",
+            "value": {"headers": ["Date", "Note"], "rows": [["2026-01-01", "Ran assay."]]},
+            "citations": [{"source_id": "s", "page": 3}],
+        }
+    }
+
+
+def test_build_output_schema_allows_cite_marker_text_in_table_cells(tmp_path: Path) -> None:
+    """A table's citations back the whole field -- no per-cell marker validation applies."""
+    path = _write_config(
+        tmp_path,
+        {"call_groups": [{"name": "g", "variables": [{"name": "deviations", "variable_type": "table"}]}]},
+    )
+    schema = build_output_schema(load_variables_config(path).call_groups[0])
+
+    validate_schema(
+        schema,
+        json.dumps(
+            {
+                "deviations": {
+                    "status": "found",
+                    "value": {"headers": ["Note"], "rows": [["mentions [[cite:9]] literally"]]},
+                    "citations": [{"source_id": "s"}],
+                }
+            }
+        ),
+    )
 
 def test_build_output_schema_rejects_out_of_range_citation_marker(tmp_path: Path) -> None:
     path = _write_config(

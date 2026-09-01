@@ -234,9 +234,61 @@ def test_write_report_merges_call_groups_and_renders(
     assert task["model"] == "anthropic/claude-sonnet-5"
     assert task["started_at"] <= task["completed_at"]
 
+    values = json.loads((result.task_dir / "values.json").read_text(encoding="utf-8"))
+    assert values == {
+        "title": {
+            "status": "found",
+            "value": "My Report[[cite:0]]",
+            "citations": [{"source_id": "src_a", "page": 1}],
+        },
+        "conclusion": {"status": "not_found"},
+    }
+
     # workspace_root itself stays untouched -- every artifact lands in .tasks/.
     assert not (workspace / "sessions.db").exists()
     assert not (workspace / "report.md").exists()
+
+
+def test_rerender_task_reproduces_or_reformats_without_a_model_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    skill_dir = _make_report_skill(skills_dir)
+    (skill_dir / "templates" / "report.html").write_text(
+        "<h1>{{title}}</h1>{{conclusion}}{{references}}", encoding="utf-8"
+    )
+    workspace = _make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
+
+    with patch.object(
+        report_orchestrator,
+        "_run_bounded_call",
+        return_value={
+            "title": {
+                "status": "found",
+                "value": "My Report[[cite:0]]",
+                "citations": [{"source_id": "src_a", "page": 1}],
+            },
+            "conclusion": {"status": "not_found"},
+        },
+    ):
+        first = report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
+
+    # No mock active here: a stray model call would fail loudly, not pass silently.
+    same_format = report_orchestrator.rerender_task(first.task_dir, workspace)
+    assert same_format.text == first.text
+    assert same_format.task_dir == first.task_dir
+    assert same_format.task_id == first.task_id
+
+    second_format = report_orchestrator.rerender_task(
+        first.task_dir, workspace, template_name="report.html"
+    )
+    assert second_format.report_path == first.task_dir / "report.html"
+    assert second_format.report_path.read_text(encoding="utf-8") == second_format.text
+    assert '<h1>My Report<sup><a href="#ref-1">1</a></sup></h1>' in second_format.text
+    assert "Not addressed in the available evidence." in second_format.text
 
 
 def test_build_session_creates_independent_rows_across_reruns(tmp_path: Path) -> None:

@@ -23,6 +23,8 @@ _BENCHLING_URL_ENV = "BENCHLING_URL"
 _LIBREOFFICE_PATH_ENV = "LIBREOFFICE_PATH"
 _ENV_PATH = Path("src/report_writing_collaborator/agent/.env")
 _WORKSPACES_ROOT = Path(".workspaces")
+_TASKS_DIR_NAME = ".tasks"
+_TASK_FILE_NAME = "task.json"
 _FILE_INSTANCE_PREFIX = "file"
 _BENCHLING_INSTANCE_PREFIX = "benchling"
 _INSTANCE_ID_WIDTH = 2
@@ -40,6 +42,7 @@ class _CliOptions:
     template: str
     model: str | None
     output: Path | None
+    rerender_task_id: str | None
     json_output: bool
     no_color: bool
     debug: bool
@@ -122,6 +125,15 @@ def _eln_sources(entry_ids: list[str]) -> list[cw.ElnSource]:
 
 
 def _check_inputs(options: _CliOptions) -> None:
+    if options.rerender_task_id:
+        if options.files or options.benchling_entry_ids:
+            _usage_error(
+                "--rerender-task cannot be combined with --file or --benchling-entry-id",
+                no_color=options.no_color,
+                json_output=options.json_output,
+            )
+        return
+
     if not options.files and not options.benchling_entry_ids:
         _usage_error(
             "at least one --file or --benchling-entry-id is required",
@@ -180,12 +192,56 @@ def _write_report(options: _CliOptions, manifest: cw.WorkspaceManifest) -> _RunR
     )
 
 
+def _find_task_dir(task_id: str) -> Path:
+    matches = sorted(_WORKSPACES_ROOT.glob(f"*/{_TASKS_DIR_NAME}/{task_id}"))
+    if not matches:
+        raise ValueError(f"No task found with id: {task_id}")
+    if len(matches) > 1:
+        raise ValueError(f"Task id '{task_id}' matches more than one workspace")
+
+    return matches[0]
+
+
+def _rerender(options: _CliOptions) -> _RunResult:
+    from report_writing_collaborator.agent import report_orchestrator
+
+    task_id = options.rerender_task_id
+    assert task_id is not None  # _check_inputs already required this to reach here
+    task_dir = _find_task_dir(task_id)
+    task = json.loads((task_dir / _TASK_FILE_NAME).read_text(encoding="utf-8"))
+    workspace_id = str(task["workspace_id"])
+    workspace_version = task["workspace_version"]
+    workspace_dir = _WORKSPACES_ROOT / workspace_id / str(workspace_version)
+
+    result = report_orchestrator.rerender_task(
+        task_dir,
+        workspace_dir,
+        skill_name=task["skill_name"],
+        template_name=options.template,
+    )
+
+    report_path = result.report_path
+    if options.output:
+        report_path = options.output
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.text, encoding="utf-8")
+
+    return _RunResult(
+        workspace_id=workspace_id,
+        workspace_version=int(workspace_version),
+        report_path=report_path,
+    )
+
+
 def _run(options: _CliOptions) -> _RunResult:
     # report_orchestrator imports agent.py, whose ADK root_agent needs a
     # placeholder WORKSPACE_ROOT before the generated workspace exists.
     os.environ[_WORKSPACE_ROOT_ENV] = os.environ.get(_WORKSPACE_ROOT_ENV) or str(_WORKSPACES_ROOT)
     _load_env(_ENV_PATH)
     _check_inputs(options)
+
+    if options.rerender_task_id:
+        return _rerender(options)
 
     output_console = _console(stderr=False, no_color=options.no_color)
     error_console = _console(stderr=True, no_color=options.no_color)
@@ -252,6 +308,15 @@ def main(
         Path | None,
         typer.Option("--output", "-o", help="Rendered report path."),
     ] = None,
+    rerender_task_id: Annotated[
+        str | None,
+        typer.Option(
+            "--rerender-task",
+            help="Re-render an existing task's persisted values.json into --template, "
+            "with no model call. Cannot combine with --file/--benchling-entry-id.",
+            show_default=False,
+        ),
+    ] = None,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Emit machine-readable JSON to stdout."),
@@ -280,6 +345,7 @@ def main(
     Examples:
       report-writing-agent --file protocol.pdf --file appendix.docx
       report-writing-agent --file protocol.pdf --benchling-entry-id etr_123
+      report-writing-agent --rerender-task 3f9c... --template report.html
     """
     _ = version_flag
     options = _CliOptions(
@@ -289,6 +355,7 @@ def main(
         template=template,
         model=model,
         output=output,
+        rerender_task_id=rerender_task_id,
         json_output=json_output,
         no_color=no_color,
         debug=debug,

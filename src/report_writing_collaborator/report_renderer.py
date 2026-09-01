@@ -92,7 +92,10 @@ def render(
     citation_numbers = {
         _citation_key(citation): number for number, citation in enumerate(citations, start=1)
     }
-    substitutions = {name: _render_field(name, field, citation_numbers) for name, field in fields}
+    substitutions = {
+        name: _render_field(name, field, citation_numbers, template_path.suffix)
+        for name, field in fields
+    }
     substitutions[_REFERENCES_KEY] = _render_references(
         citations,
         template_path.suffix,
@@ -134,12 +137,26 @@ def _render_field(
     field_name: str,
     field: Mapping[str, object],
     citation_numbers: Mapping[CitationKey, int],
+    template_suffix: str,
 ) -> str:
     if field.get("status") != "found":
         return _NOT_FOUND_FALLBACK
 
-    value = _stringify(field["value"])
+    raw_value = field["value"]
     citations = _field_citations(field)
+
+    if isinstance(raw_value, dict):
+        # A table's citations back the whole field, not per-cell markers
+        # (docs/table_variable_type.md) -- no [[cite:N]] runs to resolve;
+        # attach every citation once, after the table.
+        table_markup = _stringify(raw_value, template_suffix)
+        superscripts = ",".join(
+            _citation_superscript(citation_numbers[_citation_key(citation)])
+            for citation in citations
+        )
+        return f"{table_markup}\n\n{superscripts}"
+
+    value = _stringify(raw_value, template_suffix)
 
     def citation_link(marker: re.Match[str]) -> str:
         local_index = int(marker.group(1))
@@ -147,8 +164,7 @@ def _render_field(
             raise ReportRenderError(
                 f"Citation marker index {local_index} is out of range for field '{field_name}'"
             )
-        number = citation_numbers[_citation_key(citations[local_index])]
-        return f'<sup><a href="#ref-{number}">{number}</a></sup>'
+        return _citation_superscript(citation_numbers[_citation_key(citations[local_index])])
 
     def replace(run: re.Match[str]) -> str:
         return ",".join(
@@ -162,11 +178,44 @@ def _render_field(
     return rendered
 
 
-def _stringify(value: object) -> str:
+def _citation_superscript(number: int) -> str:
+    return f'<sup><a href="#ref-{number}">{number}</a></sup>'
+
+
+def _stringify(value: object, template_suffix: str) -> str:
     if isinstance(value, str):
         return value
 
+    if isinstance(value, dict) and "headers" in value and "rows" in value:
+        headers = cast("list[str]", value["headers"])
+        rows = cast("list[list[str]]", value["rows"])
+        if template_suffix == _HTML_SUFFIX:
+            return _render_table_html(headers, rows)
+        return _render_table_markdown(headers, rows)
+
     raise ReportRenderError(f"No stringifier for value type: {type(value).__name__}")
+
+
+def _render_table_markdown(headers: list[str], rows: list[list[str]]) -> str:
+    header_row = _markdown_table_row(headers)
+    separator_row = _markdown_table_row(["---"] * len(headers))
+    body_rows = [_markdown_table_row(row) for row in rows]
+    return "\n".join([header_row, separator_row, *body_rows])
+
+
+def _markdown_table_row(cells: list[str]) -> str:
+    # A literal `|` inside a cell would otherwise split it into extra
+    # columns -- escaped on top of _escape_markdown's usual set.
+    return "| " + " | ".join(_escape_markdown(cell).replace("|", "\\|") for cell in cells) + " |"
+
+
+def _render_table_html(headers: list[str], rows: list[list[str]]) -> str:
+    header_cells = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+    body_rows = "".join(
+        "<tr>" + "".join(f"<td>{html.escape(cell)}</td>" for cell in row) + "</tr>"
+        for row in rows
+    )
+    return f"<table><thead><tr>{header_cells}</tr></thead><tbody>{body_rows}</tbody></table>"
 
 
 def _render_references(

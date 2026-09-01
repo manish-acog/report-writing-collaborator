@@ -8,13 +8,15 @@ against the same session, so later turns build on earlier ones instead of
 re-discovering the workspace. A call_group whose output fails schema
 validation (e.g. an out-of-range [[cite:N]] marker) gets one corrective
 retry, fed the validation error as a new turn, before the run gives up on
-it. Every group's results are merged and rendered against the skill's
-template. Everything the run produces -- the session transcript,
-provenance, and the rendered report -- is written to
-.tasks/<task_id>/, a sibling of workspace_root's numbered version
-directory; workspace_root itself is never written to. See
-docs/general_report_writing.md, docs/extraction_session_persistence.md,
-docs/citation_marker_retry.md, and docs/task_run_artifacts.md for the
+it. Every group's results are merged, persisted to values.json, and
+rendered against the skill's template. Everything the run produces -- the
+session transcript, provenance, values.json, and the rendered report -- is
+written to .tasks/<task_id>/, a sibling of workspace_root's numbered
+version directory; workspace_root itself is never written to.
+rerender_task() re-renders a prior run's values.json into a different
+template, with no model call. See docs/general_report_writing.md,
+docs/extraction_session_persistence.md, docs/citation_marker_retry.md,
+docs/task_run_artifacts.md, and docs/table_variable_type.md for the
 design.
 """
 
@@ -61,6 +63,7 @@ _RUNNER_USER_ID = "report_orchestrator"
 _SESSIONS_DB_NAME = "sessions.db"
 _TASKS_DIR_NAME = ".tasks"
 _TASK_FILE_NAME = "task.json"
+_VALUES_FILE_NAME = "values.json"
 # Total attempts for one call_group's turn, including the first: one
 # corrective retry on a citation-marker validation failure before giving up.
 _VALIDATION_RETRY_LIMIT = 2
@@ -133,6 +136,10 @@ def write_report(
 
     asyncio.run(session_service.close())
 
+    (task_dir / _VALUES_FILE_NAME).write_text(
+        json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
     text = render(template_path, values, workspace_root)
 
@@ -150,6 +157,49 @@ def write_report(
 
     return WriteReportResult(
         text=text, task_id=task_id, task_dir=task_dir, report_path=report_path
+    )
+
+
+def rerender_task(
+    task_dir: Path,
+    workspace_root: Path,
+    skill_name: str = "general-report-writing",
+    template_name: str = _DEFAULT_TEMPLATE_NAME,
+) -> WriteReportResult:
+    """Re-renders a prior write_report() run's persisted values into a new template.
+
+    Reads <task_dir>/values.json -- no model call, no re-extraction -- and
+    writes the result to <task_dir>/<template_name>, alongside that run's
+    other artifacts.
+
+    Args:
+        task_dir: A .tasks/<task_id>/ directory a prior write_report() call
+            already populated with values.json.
+        workspace_root: The same published workspace directory the original
+            run read from, needed to resolve citation evidence.
+        skill_name: The report-writing skill whose templates/ to render
+            against. Must match the skill the original run used.
+        template_name: Which file in the skill's templates/ to render.
+
+    Returns:
+        The rendered report text and its .tasks/<task_id>/ archive location.
+    """
+    values_path = task_dir / _VALUES_FILE_NAME
+    try:
+        values = json.loads(values_path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise RuntimeError(f"Cannot read persisted values: {values_path}") from error
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Invalid JSON in persisted values: {values_path}") from error
+
+    template_path = SKILLS_DIR / skill_name / _TEMPLATES_DIR_NAME / template_name
+    text = render(template_path, values, workspace_root.resolve())
+
+    report_path = task_dir / template_name
+    report_path.write_text(text, encoding="utf-8")
+
+    return WriteReportResult(
+        text=text, task_id=task_dir.name, task_dir=task_dir, report_path=report_path
     )
 
 

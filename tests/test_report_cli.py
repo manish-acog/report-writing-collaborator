@@ -171,3 +171,86 @@ def test_cli_version_uses_package_version() -> None:
 
     assert result.exit_code == 0
     assert result.stdout.strip() == "report-writing-agent/0.1.0"
+
+
+def test_cli_rerender_task_uses_persisted_task_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    workspaces_root = tmp_path / ".workspaces"
+    task_dir = workspaces_root / "ws_test" / ".tasks" / "task_1"
+    task_dir.mkdir(parents=True)
+    (task_dir / "task.json").write_text(
+        json.dumps(
+            {
+                "workspace_id": "ws_test",
+                "workspace_version": 1,
+                "skill_name": "general-report-writing",
+                "template_name": "report.md",
+                "model": "anthropic/claude-sonnet-5",
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "completed_at": "2026-01-01T00:00:01+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli_main, "_ENV_PATH", tmp_path / ".env")
+    monkeypatch.setattr(cli_main, "_WORKSPACES_ROOT", workspaces_root)
+
+    fake_result = SimpleNamespace(text="<h1>Report</h1>", report_path=task_dir / "report.html")
+
+    with patch(
+        "report_writing_collaborator.agent.report_orchestrator.rerender_task",
+        return_value=fake_result,
+    ) as rerender_task:
+        result = runner.invoke(
+            cli_main.app,
+            ["--rerender-task", "task_1", "--template", "report.html", "--json"],
+        )
+
+    assert result.exit_code == 0, result.output
+    rerender_task.assert_called_once_with(
+        task_dir,
+        workspaces_root / "ws_test" / "1",
+        skill_name="general-report-writing",
+        template_name="report.html",
+    )
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "ok": True,
+        "data": {
+            "workspace_id": "ws_test",
+            "workspace_version": 1,
+            "report_path": str(task_dir / "report.html"),
+        },
+    }
+
+
+def test_cli_rejects_rerender_task_combined_with_file(tmp_path: Path) -> None:
+    runner = CliRunner()
+    source_file = tmp_path / "protocol.pdf"
+    source_file.write_bytes(b"pdf")
+
+    result = runner.invoke(
+        cli_main.app, ["--rerender-task", "task_1", "--file", str(source_file)]
+    )
+
+    assert result.exit_code == 2
+    assert "cannot be combined with --file" in result.stderr
+
+
+def test_cli_rejects_unknown_rerender_task_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = CliRunner()
+    workspaces_root = tmp_path / ".workspaces"
+    workspaces_root.mkdir()
+    monkeypatch.setattr(cli_main, "_ENV_PATH", tmp_path / ".env")
+    monkeypatch.setattr(cli_main, "_WORKSPACES_ROOT", workspaces_root)
+
+    result = runner.invoke(cli_main.app, ["--rerender-task", "no-such-task"])
+
+    assert result.exit_code == 1
+    assert "No task found with id: no-such-task" in result.stderr
