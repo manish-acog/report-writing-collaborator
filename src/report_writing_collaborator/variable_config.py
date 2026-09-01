@@ -10,10 +10,11 @@ docs/general_report_writing.md for the design.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from report_writing_collaborator.exceptions import VariableConfigError
 
@@ -21,6 +22,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _MIN_CITATIONS = 1
+# Matches a report_renderer.CITATION_MARKER_PATTERN marker inside a found
+# field's value, so an out-of-range index is caught here -- one call_group's
+# turn -- instead of surviving to the end of the run.
+_CITATION_MARKER_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
 
 # variable_type -> the Python type its "found" value is typed as. Extend
 # this when a skill needs a new kind of field (e.g. a table or an image
@@ -138,12 +143,65 @@ def build_output_schema(call_group: CallGroup) -> type[BaseModel]:
 def _field_type(variable: VariableDef) -> object:
     python_type = _VARIABLE_TYPES[variable.variable_type]
 
+    def check_citation_markers(found: BaseModel) -> BaseModel:
+        """Rejects a [[cite:N]] marker in value with no matching citations entry.
+
+        Runs as part of model_validate_json, so a bad index fails inside its
+        own call_group's turn instead of surviving to
+        report_renderer.render() after every other turn has already run.
+
+        `found`'s fields are only known at runtime -- this class is built
+        fresh per variable_type below -- so its attributes are read via
+        getattr rather than static access.
+        """
+        value = getattr(found, "value", None)
+        if not isinstance(value, str):
+            return found
+
+        citations: list[Citation] = getattr(found, "citations", [])
+        citation_count = len(citations)
+        out_of_range = sorted(
+            {int(index) for index in _CITATION_MARKER_PATTERN.findall(value)}
+            - set(range(citation_count))
+        )
+        if out_of_range:
+            raise ValueError(
+                f"Citation marker index {out_of_range[0]} is out of range for field "
+                f"'{variable.name}' -- only {citation_count} citations declared "
+                f"(valid: 0-{citation_count - 1})"
+            )
+        return found
+
+    # create_model's own stubs type __validators__ as dict[str, Callable[..., Any]],
+    # narrower than what model_validator(...)(fn) actually returns
+    # (PydanticDescriptorProxy) -- the documented pydantic pattern regardless.
+    validators: dict[str, Any] = {
+        "_check_citation_markers": model_validator(mode="after")(check_citation_markers)
+    }
     found = create_model(
         f"{variable.name}_found",
         status=(Literal["found"], ...),
-        value=(python_type, ...),
-        citations=(list[Citation], Field(..., min_length=_MIN_CITATIONS)),
+        # citations before value: the model commits its evidence list before
+        # writing prose that references it by 0-based position.
+        citations=(
+            list[Citation],
+            Field(
+                ...,
+                min_length=_MIN_CITATIONS,
+                description="Evidence for value, in generation order. A [[cite:N]] marker "
+                "in value refers to this array's 0-based index N.",
+            ),
+        ),
+        value=(
+            python_type,
+            Field(
+                ...,
+                description="Prose with a [[cite:N]] marker after every factual claim, where "
+                "N is the 0-based index of its evidence in this field's own citations array.",
+            ),
+        ),
         __config__=ConfigDict(extra="forbid"),
+        __validators__=validators,
     )
     not_found = create_model(
         f"{variable.name}_not_found",

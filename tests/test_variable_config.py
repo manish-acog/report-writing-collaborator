@@ -153,6 +153,28 @@ def test_build_output_schema_accepts_found_with_citations(tmp_path: Path) -> Non
     }
 
 
+def test_build_output_schema_rejects_out_of_range_citation_marker(tmp_path: Path) -> None:
+    path = _write_config(
+        tmp_path,
+        {"call_groups": [{"name": "g", "variables": [{"name": "title", "variable_type": "text"}]}]},
+    )
+    schema = build_output_schema(load_variables_config(path).call_groups[0])
+
+    with pytest.raises(Exception, match=r"index 1 is out of range for field 'title'"):
+        validate_schema(
+            schema,
+            json.dumps(
+                {
+                    "title": {
+                        "status": "found",
+                        "value": "Claim[[cite:1]].",
+                        "citations": [{"source_id": "s"}],
+                    }
+                }
+            ),
+        )
+
+
 def test_build_output_schema_accepts_not_found_without_value_or_citations(
     tmp_path: Path,
 ) -> None:

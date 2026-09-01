@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
 from google.adk.skills import load_skill_from_dir
 from google.adk.tools.skill_toolset import SkillToolset
 
@@ -13,8 +14,6 @@ from report_writing_collaborator.agent import report_orchestrator
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def _make_skill_dir(root: Path, name: str, description: str, instructions: str) -> Path:
@@ -267,3 +266,127 @@ def test_build_session_creates_independent_rows_across_reruns(tmp_path: Path) ->
 
     assert len(final_a.events) == 2
     assert len(final_b.events) == 1
+
+
+def test_run_bounded_call_retries_once_on_validation_error_then_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from google.adk.events.event import Event
+    from google.adk.events.event_actions import EventActions
+    from pydantic import ValidationError
+
+    skills_dir = tmp_path / "skills"
+    grounding_skill = load_skill_from_dir(
+        _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    )
+    config = load_variables_config(_make_report_skill(skills_dir) / "variables.json")
+    schema = build_output_schema(config.call_groups[0])
+    try:
+        schema.model_validate_json(
+            json.dumps(
+                {
+                    "title": {
+                        "status": "found",
+                        "value": "Claim[[cite:1]].",
+                        "citations": [{"source_id": "src_a"}],
+                    },
+                    "conclusion": {"status": "not_found"},
+                }
+            )
+        )
+        pytest.fail("expected a ValidationError")
+    except ValidationError as caught:
+        validation_error = caught
+
+    workspace = _make_workspace(tmp_path / "workspace")
+    agent = report_orchestrator._build_bounded_agent(
+        workspace, "anthropic/claude-sonnet-5", schema, "do the extraction", grounding_skill
+    )
+    session_service, session_id = report_orchestrator._build_session(workspace)
+    prompts: list[str] = []
+
+    class _FakeRunner:
+        def __init__(self, *, agent, app_name, session_service) -> None:
+            self._session_service = session_service
+
+        async def run_async(self, *, user_id, session_id, new_message):
+            prompts.append(new_message.parts[0].text)
+            if len(prompts) == 1:
+                raise validation_error
+            session = await self._session_service.get_session(
+                app_name=report_orchestrator._RUNNER_APP_NAME,
+                user_id=report_orchestrator._RUNNER_USER_ID,
+                session_id=session_id,
+            )
+            event = Event(
+                author="agent",
+                actions=EventActions(state_delta={report_orchestrator._OUTPUT_KEY: {"ok": True}}),
+            )
+            await self._session_service.append_event(session, event)
+            return
+            yield
+
+    monkeypatch.setattr(report_orchestrator, "Runner", _FakeRunner)
+
+    result = report_orchestrator._run_bounded_call(
+        agent, session_service, session_id, "Extract the fields."
+    )
+
+    assert result == {"ok": True}
+    assert len(prompts) == 2
+    assert prompts[0] == "Extract the fields."
+    assert "out of range for field 'title'" in prompts[1]
+
+
+def test_run_bounded_call_raises_after_retries_exhausted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic import ValidationError
+
+    skills_dir = tmp_path / "skills"
+    grounding_skill = load_skill_from_dir(
+        _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    )
+    config = load_variables_config(_make_report_skill(skills_dir) / "variables.json")
+    schema = build_output_schema(config.call_groups[0])
+    try:
+        schema.model_validate_json(
+            json.dumps(
+                {
+                    "title": {
+                        "status": "found",
+                        "value": "Claim[[cite:1]].",
+                        "citations": [{"source_id": "src_a"}],
+                    },
+                    "conclusion": {"status": "not_found"},
+                }
+            )
+        )
+        pytest.fail("expected a ValidationError")
+    except ValidationError as caught:
+        validation_error = caught
+
+    workspace = _make_workspace(tmp_path / "workspace")
+    agent = report_orchestrator._build_bounded_agent(
+        workspace, "anthropic/claude-sonnet-5", schema, "do the extraction", grounding_skill
+    )
+    session_service, session_id = report_orchestrator._build_session(workspace)
+    prompts: list[str] = []
+
+    class _AlwaysInvalidRunner:
+        def __init__(self, *, agent, app_name, session_service) -> None:
+            pass
+
+        async def run_async(self, *, user_id, session_id, new_message):
+            prompts.append(new_message.parts[0].text)
+            raise validation_error
+            yield
+
+    monkeypatch.setattr(report_orchestrator, "Runner", _AlwaysInvalidRunner)
+
+    with pytest.raises(RuntimeError, match="failed schema validation after 2 attempts"):
+        report_orchestrator._run_bounded_call(
+            agent, session_service, session_id, "Extract the fields."
+        )
+
+    assert len(prompts) == report_orchestrator._VALIDATION_RETRY_LIMIT

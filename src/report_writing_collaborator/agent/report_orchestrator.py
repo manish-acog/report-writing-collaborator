@@ -5,9 +5,13 @@ bootstrap turn (workspace-summary only) builds structural understanding
 once, then one bounded LlmAgent turn per call_group (evidence-grounding
 plus workspace tools, constrained to that group's schema) extracts fields
 against the same session, so later turns build on earlier ones instead of
-re-discovering the workspace. Every group's results are merged and rendered
-against the skill's template. See docs/general_report_writing.md and
-docs/extraction_session_persistence.md for the design.
+re-discovering the workspace. A call_group whose output fails schema
+validation (e.g. an out-of-range [[cite:N]] marker) gets one corrective
+retry, fed the validation error as a new turn, before the run gives up on
+it. Every group's results are merged and rendered against the skill's
+template. See docs/general_report_writing.md,
+docs/extraction_session_persistence.md, and docs/citation_marker_retry.md
+for the design.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.adk.skills import load_skill_from_dir
 from google.adk.tools.skill_toolset import SkillToolset
 from google.genai import types as genai_types
+from pydantic import ValidationError
 
 from report_writing_collaborator import build_output_schema, load_variables_config, render
 from report_writing_collaborator.agent.agent import DEFAULT_MODEL, SKILLS_DIR, make_workspace_tools
@@ -46,6 +51,9 @@ _OUTPUT_KEY = "result"
 _RUNNER_APP_NAME = "report_orchestrator"
 _RUNNER_USER_ID = "report_orchestrator"
 _SESSIONS_DB_NAME = "sessions.db"
+# Total attempts for one call_group's turn, including the first: one
+# corrective retry on a citation-marker validation failure before giving up.
+_VALIDATION_RETRY_LIMIT = 2
 _EXTRACTION_PROMPT = "Extract the fields listed in your instructions from this workspace."
 _BOOTSTRAP_PROMPT = (
     "Load the `workspace-summary` skill and follow its structural pass to build "
@@ -195,15 +203,27 @@ async def _run_bounded_call_async(
     expect_output: bool,
 ) -> dict:
     runner = Runner(agent=agent, app_name=_RUNNER_APP_NAME, session_service=session_service)
-    message = genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])
+    next_prompt = prompt
 
-    try:
-        async for _event in runner.run_async(
-            user_id=_RUNNER_USER_ID, session_id=session_id, new_message=message
-        ):
-            pass
-    except Exception as error:
-        raise RuntimeError(f"Model call for '{agent.name}' failed: {error}") from error
+    for attempt in range(1, _VALIDATION_RETRY_LIMIT + 1):
+        message = genai_types.Content(role="user", parts=[genai_types.Part(text=next_prompt)])
+        try:
+            async for _event in runner.run_async(
+                user_id=_RUNNER_USER_ID, session_id=session_id, new_message=message
+            ):
+                pass
+        except ValidationError as error:
+            if attempt == _VALIDATION_RETRY_LIMIT:
+                raise RuntimeError(
+                    f"Model call for '{agent.name}' failed schema validation after "
+                    f"{attempt} attempts: {'; '.join(_validation_messages(error))}"
+                ) from error
+            next_prompt = _corrective_prompt(error)
+            continue
+        except Exception as error:
+            raise RuntimeError(f"Model call for '{agent.name}' failed: {error}") from error
+        else:
+            break
 
     if not expect_output:
         return {}
@@ -215,3 +235,21 @@ async def _run_bounded_call_async(
         raise RuntimeError(f"Model call for '{agent.name}' produced no structured output")
 
     return updated.state[_OUTPUT_KEY]
+
+
+def _validation_messages(error: ValidationError) -> list[str]:
+    """Extracts each error's own message, without pydantic's boilerplate wrapper text."""
+    messages = []
+    for detail in error.errors():
+        ctx_error = detail.get("ctx", {}).get("error")
+        messages.append(str(ctx_error) if ctx_error is not None else detail["msg"])
+    return messages
+
+
+def _corrective_prompt(error: ValidationError) -> str:
+    """Builds the next turn's message: the validation failure, sent back for a fix."""
+    details = "; ".join(_validation_messages(error))
+    return (
+        f"Your last response failed schema validation: {details}. Correct the "
+        f"issue and resend the complete output for this call."
+    )
