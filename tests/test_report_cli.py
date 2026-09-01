@@ -16,6 +16,103 @@ if TYPE_CHECKING:
     import pytest
 
 
+def test_file_sources_pairs_roles_by_position(tmp_path: Path) -> None:
+    paths = [tmp_path / "a.pdf", tmp_path / "b.pdf"]
+
+    sources = cli_main._file_sources(paths, ["protocol", "sop"])
+
+    assert [s.source_role for s in sources] == ["protocol", "sop"]
+    assert [s.source_instance_id for s in sources] == ["file_01", "file_02"]
+
+
+def test_file_sources_leaves_remainder_unset_when_fewer_roles(tmp_path: Path) -> None:
+    paths = [tmp_path / "a.pdf", tmp_path / "b.pdf"]
+
+    sources = cli_main._file_sources(paths, ["protocol"])
+
+    assert [s.source_role for s in sources] == ["protocol", None]
+
+
+def test_file_sources_defaults_to_no_roles(tmp_path: Path) -> None:
+    sources = cli_main._file_sources([tmp_path / "a.pdf"], [])
+
+    assert sources[0].source_role is None
+
+
+def test_eln_sources_pairs_roles_by_position() -> None:
+    sources = cli_main._eln_sources(["etr_1", "etr_2"], ["dosing_records", "necropsy_findings"])
+
+    assert [s.source_role for s in sources] == ["dosing_records", "necropsy_findings"]
+
+
+def test_eln_sources_leaves_remainder_unset_when_fewer_roles() -> None:
+    sources = cli_main._eln_sources(["etr_1", "etr_2"], ["dosing_records"])
+
+    assert [s.source_role for s in sources] == ["dosing_records", None]
+
+
+def test_cli_wires_file_and_benchling_roles_by_position(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    source_file = tmp_path / "protocol.pdf"
+    source_file.write_bytes(b"pdf")
+    workspaces_root = tmp_path / ".workspaces"
+    built_sources: list[FileSource | ElnSource] = []
+
+    monkeypatch.setattr(cli_main, "_ENV_PATH", tmp_path / ".env")
+    monkeypatch.setattr(cli_main, "_WORKSPACES_ROOT", workspaces_root)
+
+    def fake_build(sources, config):
+        built_sources.extend(sources)
+        workspace_dir = config.publish_root / "ws_role" / "1"
+        workspace_dir.mkdir(parents=True)
+        return SimpleNamespace(workspace_id="ws_role", workspace_version=1)
+
+    fake_result = SimpleNamespace(
+        text="# Report\n",
+        report_path=workspaces_root / "ws_role" / ".tasks" / "task_1" / "report.md",
+    )
+
+    with (
+        patch("canonical_workspace.build_workspace", side_effect=fake_build),
+        patch(
+            "report_writing_collaborator.agent.report_orchestrator.write_report",
+            return_value=fake_result,
+        ),
+    ):
+        result = runner.invoke(
+            cli_main.app,
+            [
+                "--file",
+                str(source_file),
+                "--file-role",
+                "protocol",
+                "--benchling-entry-id",
+                "etr_1",
+                "--benchling-entry-id",
+                "etr_2",
+                "--benchling-role",
+                "dosing_records",
+                "--benchling-role",
+                "necropsy_findings",
+            ],
+            env={
+                "BENCHLING_API_KEY": "key",
+                "BENCHLING_URL": "https://example.benchling.com",
+                "NO_COLOR": "1",
+            },
+        )
+
+    assert result.exit_code == 0, result.output
+    assert [s.source_role for s in built_sources] == [
+        "protocol",
+        "dosing_records",
+        "necropsy_findings",
+    ]
+
+
 def test_cli_builds_workspace_and_writes_report(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

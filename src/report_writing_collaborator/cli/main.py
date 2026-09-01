@@ -37,7 +37,9 @@ app = typer.Typer(add_completion=False, rich_markup_mode="rich")
 @dataclass(frozen=True, slots=True)
 class _CliOptions:
     files: list[Path]
+    file_roles: list[str]
     benchling_entry_ids: list[str]
+    benchling_roles: list[str]
     skill: str
     template: str
     model: str | None
@@ -104,21 +106,23 @@ def _usage_error(message: str, *, no_color: bool, json_output: bool = False) -> 
     raise typer.Exit(code=2)
 
 
-def _file_sources(paths: list[Path]) -> list[cw.FileSource]:
+def _file_sources(paths: list[Path], roles: list[str]) -> list[cw.FileSource]:
     return [
         cw.FileSource(
             path=path,
             source_instance_id=f"{_FILE_INSTANCE_PREFIX}_{index:0{_INSTANCE_ID_WIDTH}d}",
+            source_role=roles[index - 1] if index - 1 < len(roles) else None,
         )
         for index, path in enumerate(paths, start=1)
     ]
 
 
-def _eln_sources(entry_ids: list[str]) -> list[cw.ElnSource]:
+def _eln_sources(entry_ids: list[str], roles: list[str]) -> list[cw.ElnSource]:
     return [
         cw.ElnSource(
             entry_id=entry_id,
             source_instance_id=f"{_BENCHLING_INSTANCE_PREFIX}_{index:0{_INSTANCE_ID_WIDTH}d}",
+            source_role=roles[index - 1] if index - 1 < len(roles) else None,
         )
         for index, entry_id in enumerate(entry_ids, start=1)
     ]
@@ -152,8 +156,8 @@ def _check_inputs(options: _CliOptions) -> None:
 
 def _build_workspace(options: _CliOptions) -> cw.WorkspaceManifest:
     sources: list[cw.FileSource | cw.ElnSource] = [
-        *_file_sources(options.files),
-        *_eln_sources(options.benchling_entry_ids),
+        *_file_sources(options.files, options.file_roles),
+        *_eln_sources(options.benchling_entry_ids, options.benchling_roles),
     ]
     _WORKSPACES_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -282,11 +286,30 @@ def main(
             show_default=False,
         ),
     ] = None,
+    file_roles: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--file-role",
+            help="Role for the --file at the same position. Repeat to pair with each "
+            "--file, in order; fewer roles than files leaves the rest unset.",
+            show_default=False,
+        ),
+    ] = None,
     benchling_entry_ids: Annotated[
         list[str] | None,
         typer.Option(
             "--benchling-entry-id",
             help="Benchling entry ID. Repeat for multiple entries. Requires BENCHLING_API_KEY and BENCHLING_URL.",
+            show_default=False,
+        ),
+    ] = None,
+    benchling_roles: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--benchling-role",
+            help="Role for the --benchling-entry-id at the same position. Repeat to pair "
+            "with each --benchling-entry-id, in order; fewer roles than entries leaves "
+            "the rest unset.",
             show_default=False,
         ),
     ] = None,
@@ -346,11 +369,15 @@ def main(
       report-writing-agent --file protocol.pdf --file appendix.docx
       report-writing-agent --file protocol.pdf --benchling-entry-id etr_123
       report-writing-agent --rerender-task 3f9c... --template report.html
+      report-writing-agent --benchling-entry-id etr_1 --benchling-entry-id etr_2 \\
+        --benchling-role dosing_records --benchling-role necropsy_findings
     """
     _ = version_flag
     options = _CliOptions(
         files=file_paths or [],
+        file_roles=file_roles or [],
         benchling_entry_ids=benchling_entry_ids or [],
+        benchling_roles=benchling_roles or [],
         skill=skill,
         template=template,
         model=model,
