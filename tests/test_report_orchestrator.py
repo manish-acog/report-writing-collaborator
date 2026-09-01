@@ -244,6 +244,16 @@ def test_write_report_merges_call_groups_and_renders(
         "conclusion": {"status": "not_found"},
     }
 
+    usage = json.loads((result.task_dir / "usage.json").read_text(encoding="utf-8"))
+    assert usage == {
+        "event_count": 0,
+        "tool_calls": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cached_tokens": 0,
+        "total_tokens": 0,
+    }
+
     # workspace_root itself stays untouched -- every artifact lands in .tasks/.
     assert not (workspace / "sessions.db").exists()
     assert not (workspace / "report.md").exists()
@@ -327,6 +337,70 @@ def test_write_report_persists_partial_values_before_a_later_group_fails(
         }
     }
 
+
+
+def test_summarize_usage_sums_tokens_and_counts_tool_calls(tmp_path: Path) -> None:
+    from google.adk.events.event import Event
+    from google.genai import types as genai_types
+
+    workspace = _make_workspace(tmp_path / "workspace")
+    session_service, session_id = report_orchestrator._build_session(workspace)
+
+    async def _append_events() -> None:
+        text_session = await session_service.get_session(
+            app_name=report_orchestrator._RUNNER_APP_NAME,
+            user_id=report_orchestrator._RUNNER_USER_ID,
+            session_id=session_id,
+        )
+        text_event = Event(
+            author="agent",
+            content=genai_types.Content(role="model", parts=[genai_types.Part(text="hi")]),
+            usage_metadata=genai_types.GenerateContentResponseUsageMetadata(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                cached_content_token_count=2,
+                total_token_count=15,
+            ),
+        )
+        await session_service.append_event(text_session, text_event)
+
+        call_session = await session_service.get_session(
+            app_name=report_orchestrator._RUNNER_APP_NAME,
+            user_id=report_orchestrator._RUNNER_USER_ID,
+            session_id=session_id,
+        )
+        call_event = Event(
+            author="agent",
+            content=genai_types.Content(
+                role="model",
+                parts=[
+                    genai_types.Part(
+                        function_call=genai_types.FunctionCall(name="glob_workspace", args={})
+                    )
+                ],
+            ),
+            usage_metadata=genai_types.GenerateContentResponseUsageMetadata(
+                prompt_token_count=20,
+                candidates_token_count=8,
+                cached_content_token_count=0,
+                total_token_count=28,
+            ),
+        )
+        await session_service.append_event(call_session, call_event)
+
+    asyncio.run(_append_events())
+
+    usage = asyncio.run(report_orchestrator._summarize_usage(session_service, session_id))
+    asyncio.run(session_service.close())
+
+    assert usage == {
+        "event_count": 2,
+        "tool_calls": 1,
+        "prompt_tokens": 30,
+        "completion_tokens": 13,
+        "cached_tokens": 2,
+        "total_tokens": 43,
+    }
 
 def test_rerender_task_reproduces_or_reformats_without_a_model_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

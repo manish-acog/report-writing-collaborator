@@ -32,6 +32,10 @@ runs against the same version don't collide or overwrite each other.
   - `sessions.db` — moved here from `workspace_root/sessions.db`.
   - `values.json` — the persisted value map; shape and use covered in
     `docs/table_variable_type.md`, not repeated here.
+  - `usage.json` — a slim, derived summary of the run's session: model,
+    tool/skill call counts, and prompt/completion/cached token totals,
+    computed from `sessions.db`'s own event history. Not a trace, not raw
+    events — see the new Decision below.
   - the rendered report (`report.md` / `report.html`, whatever template ran).
 - **`report_orchestrator.write_report`** — writes to `.tasks/<task_id>/`
   for everything it produces; `workspace_root` stays read-only throughout,
@@ -111,6 +115,26 @@ CLI-only doc establishes serves that later without a redesign.
   being enough — additive, not a redesign, because the spans are already
   being emitted regardless of whether anything collects them today.
 
+### `usage.json` is a derived summary, not a reversal of "no tracing tool"
+
+- **Options:** A — leave session stats unsurfaced; anyone who wants them
+  queries `sessions.db` directly. B (chosen) — write a small, computed
+  summary (`usage.json`) after the run, alongside the raw `sessions.db` it
+  was derived from.
+- **Chose:** B.
+- **Consequences:** this is the fallback the tracing decision above already
+  named — *"`sessions.db`'s existing event history... is enough until a
+  real need for visual trace exploration shows up"* — being realized, not
+  reopened. `usage.json` adds no instrumentation: every `Event` already
+  carries `usage_metadata` (prompt/completion/cached token counts, every
+  provider ADK supports), and tool/skill calls are already visible as
+  `function_call` parts on existing events. This is aggregation of data
+  already captured, computed once after `session_service.close()`, not a
+  new capability. Kept separate from `task.json` — that file is what was
+  *requested* (skill, template, model, workspace); `usage.json` is what
+  *happened* (counts, tokens) — conflating the two blurs two different
+  questions a reader might ask.
+
 ## Not doing
 
 - **A task-runner abstraction, queue, or status API** — this doc only
@@ -141,3 +165,26 @@ explicit second copy there, unchanged in behavior. `values.json` isn't
 written yet — that's `docs/table_variable_type.md`'s scope, not repeated
 here. Pointer added to `docs/extraction_session_persistence.md`'s
 `sessions.db`-placement decision, noting it's superseded here.
+
+## Implementation (`usage.json`)
+
+`_summarize_usage(session_service, session_id)` sums each event's
+`usage_metadata` (`prompt_token_count`, `candidates_token_count` as
+`completion_tokens`, `cached_content_token_count`, `total_token_count`)
+and counts events whose content carries a `function_call` part
+(`event.get_function_calls()`), then `write_report` writes the result to
+`.tasks/<task_id>/usage.json`. `model` is left out of `usage.json` --
+already in `task.json`, not worth the extra plumbing for a field the
+reader can get one file over.
+
+**Deviates from this doc's own "Next" wording.** It said fetch the
+session *after* `session_service.close()`. Confirmed empirically instead:
+a `get_session()` call issued after `close()` opens a fresh pooled
+connection whose `aiosqlite` worker thread the already-disposed engine
+never reclaims -- the call itself returns in milliseconds, but the
+interpreter then sits alive for ~20s past a clean run's own exit (0.7s
+baseline), waiting on that leaked non-daemon thread. Fetching the session
+*before* `close()` -- functionally identical, since nothing else touches
+the session in between -- avoids it entirely; timed at the same ~0.8s as
+the no-reopen baseline. `write_report` now computes `usage.json` right
+before its one and only `session_service.close()` call.

@@ -10,8 +10,8 @@ validation (e.g. an out-of-range [[cite:N]] marker) gets one corrective
 retry, fed the validation error as a new turn, before the run gives up on
 it. Every group's results are merged, persisted to values.json, and
 rendered against the skill's template. Everything the run produces -- the
-session transcript, provenance, values.json, and the rendered report -- is
-written to .tasks/<task_id>/, a sibling of workspace_root's numbered
+session transcript, provenance, values.json, a derived usage.json
+(token/tool-call counts), and the rendered report -- is
 version directory; workspace_root itself is never written to.
 rerender_task() re-renders a prior run's values.json into a different
 template, with no model call. See docs/general_report_writing.md,
@@ -64,6 +64,7 @@ _SESSIONS_DB_NAME = "sessions.db"
 _TASKS_DIR_NAME = ".tasks"
 _TASK_FILE_NAME = "task.json"
 _VALUES_FILE_NAME = "values.json"
+_USAGE_FILE_NAME = "usage.json"
 # Total attempts for one call_group's turn, including the first: one
 # corrective retry on a citation-marker validation failure before giving up.
 _VALIDATION_RETRY_LIMIT = 2
@@ -140,6 +141,11 @@ def write_report(
             json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
 
+    usage = asyncio.run(_summarize_usage(session_service, session_id))
+    (task_dir / _USAGE_FILE_NAME).write_text(
+        json.dumps(usage, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
     asyncio.run(session_service.close())
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
@@ -203,6 +209,47 @@ def rerender_task(
     return WriteReportResult(
         text=text, task_id=task_dir.name, task_dir=task_dir, report_path=report_path
     )
+
+
+async def _summarize_usage(session_service: BaseSessionService, session_id: str) -> dict:
+    """Sums token and tool-call counts across a session's own event history.
+
+    Fetched before session_service.close(), not after: a get_session()
+    call issued after close() opens a fresh pooled connection whose
+    aiosqlite worker thread the closed engine never reclaims, leaving the
+    interpreter alive ~20s past a clean run's own exit -- confirmed
+    empirically by timing a same-process reopen against a throwaway
+    SQLite file. Not a trace, not raw events -- see
+    docs/task_run_artifacts.md.
+    """
+    session = await session_service.get_session(
+        app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID, session_id=session_id
+    )
+    events = session.events if session is not None else []
+
+    prompt_tokens = 0
+    completion_tokens = 0
+    cached_tokens = 0
+    total_tokens = 0
+    tool_calls = 0
+    for event in events:
+        usage = event.usage_metadata
+        if usage is not None:
+            prompt_tokens += usage.prompt_token_count or 0
+            completion_tokens += usage.candidates_token_count or 0
+            cached_tokens += usage.cached_content_token_count or 0
+            total_tokens += usage.total_token_count or 0
+        if event.get_function_calls():
+            tool_calls += 1
+
+    return {
+        "event_count": len(events),
+        "tool_calls": tool_calls,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cached_tokens": cached_tokens,
+        "total_tokens": total_tokens,
+    }
 
 
 def _write_task_metadata(
