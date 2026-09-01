@@ -20,6 +20,7 @@ _DEFAULT_TEMPLATE = "report.md"
 _WORKSPACE_ROOT_ENV = "WORKSPACE_ROOT"
 _BENCHLING_API_KEY_ENV = "BENCHLING_API_KEY"
 _BENCHLING_URL_ENV = "BENCHLING_URL"
+_LIBREOFFICE_PATH_ENV = "LIBREOFFICE_PATH"
 _ENV_PATH = Path("src/report_writing_collaborator/agent/.env")
 _WORKSPACES_ROOT = Path(".workspaces")
 _FILE_INSTANCE_PREFIX = "file"
@@ -148,6 +149,7 @@ def _build_workspace(options: _CliOptions) -> cw.WorkspaceManifest:
         sources,
         cw.WorkspaceConfig(
             publish_root=_WORKSPACES_ROOT,
+            libreoffice_path=os.environ.get(_LIBREOFFICE_PATH_ENV) or "soffice",
             benchling_api_key=os.environ.get(_BENCHLING_API_KEY_ENV),
             benchling_url=os.environ.get(_BENCHLING_URL_ENV),
         ),

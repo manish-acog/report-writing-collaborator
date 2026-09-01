@@ -253,7 +253,12 @@ class DocumentNormalizer:
         converted_path = conversion_dir / "converted.pdf"
 
         # Isolated profiles avoid user state and concurrent LibreOffice locks.
-        with tempfile.TemporaryDirectory(dir=conversion_dir) as temporary_dir:
+        # Rooted in system temp, not under conversion_dir: LibreOffice nests
+        # its own profile cache several levels deeper still, and staging is
+        # inside the durable workspace tree -- on Windows that combination
+        # pushes the total path past MAX_PATH (260 chars) and LibreOffice
+        # crashes instead of erroring cleanly.
+        with tempfile.TemporaryDirectory() as temporary_dir:
             temporary_path = Path(temporary_dir)
             profile_path = temporary_path / "profile"
             command = [
