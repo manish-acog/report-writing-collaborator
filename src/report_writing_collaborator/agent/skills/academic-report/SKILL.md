@@ -11,8 +11,9 @@ fields for this call are listed at the end of your instructions.
 
 ## Steps
 
-1. Load the `workspace-summary` skill and follow its structural pass before
-   extracting anything.
+1. This session already built a structural understanding of the workspace
+   via the `workspace-summary` skill before this call began — rely on that
+   context rather than re-deriving it.
 2. Load the `evidence-grounding` skill and apply its status, citation,
    image-evidence, and writing-style rules to every field.
 3. Keep **results** and **discussion** strictly separate: state findings

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -92,12 +93,9 @@ def _make_workspace(root: Path) -> Path:
     return root
 
 
-def test_build_bounded_agent_has_schema_and_shared_skills(tmp_path: Path) -> None:
+def test_build_bounded_agent_has_schema_and_grounding_skill(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path / "workspace")
     skills_dir = tmp_path / "skills"
-    structure_skill = load_skill_from_dir(
-        _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
-    )
     grounding_skill = load_skill_from_dir(
         _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
     )
@@ -109,7 +107,7 @@ def test_build_bounded_agent_has_schema_and_shared_skills(tmp_path: Path) -> Non
         "anthropic/claude-sonnet-5",
         schema,
         "do the extraction",
-        [structure_skill, grounding_skill],
+        grounding_skill,
     )
 
     assert agent.output_schema is schema
@@ -123,10 +121,31 @@ def test_build_bounded_agent_has_schema_and_shared_skills(tmp_path: Path) -> Non
         "SkillToolset",
     }
     skill_toolset = next(tool for tool in agent.tools if isinstance(tool, SkillToolset))
-    assert [skill.frontmatter.name for skill in skill_toolset.skills] == [
-        "workspace-summary",
-        "evidence-grounding",
-    ]
+    assert [skill.frontmatter.name for skill in skill_toolset.skills] == ["evidence-grounding"]
+
+
+def test_build_bootstrap_agent_has_no_schema_and_structure_skill(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path / "workspace")
+    skills_dir = tmp_path / "skills"
+    structure_skill = load_skill_from_dir(
+        _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    )
+
+    agent = report_orchestrator._build_bootstrap_agent(
+        workspace, "anthropic/claude-sonnet-5", structure_skill
+    )
+
+    assert agent.output_schema is None
+    tool_names = {getattr(tool, "__name__", type(tool).__name__) for tool in agent.tools}
+    assert tool_names == {
+        "glob_workspace",
+        "grep_workspace",
+        "read_workspace_file",
+        "inspect_image",
+        "SkillToolset",
+    }
+    skill_toolset = next(tool for tool in agent.tools if isinstance(tool, SkillToolset))
+    assert [skill.frontmatter.name for skill in skill_toolset.skills] == ["workspace-summary"]
 
 
 def test_build_instruction_combines_skill_body_and_field_list(tmp_path: Path) -> None:
@@ -200,7 +219,51 @@ def test_write_report_merges_call_groups_and_renders(
     ) as run_call:
         result = report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
 
-    assert run_call.call_count == 1
+    assert run_call.call_count == 2
     assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result
     assert "Not addressed in the available evidence." in result
     assert "[Protocol.pdf](sources/src_a/original.pdf#page=1) (protocol), page 1" in result
+    assert (workspace / "sessions.db").exists()
+
+
+def test_build_session_creates_independent_rows_across_reruns(tmp_path: Path) -> None:
+    from google.adk.events.event import Event
+    from google.genai import types as genai_types
+
+    workspace = _make_workspace(tmp_path / "workspace")
+
+    service_a, session_id_a = report_orchestrator._build_session(workspace)
+    service_b, session_id_b = report_orchestrator._build_session(workspace)
+
+    assert session_id_a != session_id_b
+    assert (workspace / "sessions.db").exists()
+
+    async def _append(service, session_id, count):
+        session = await service.get_session(
+            app_name=report_orchestrator._RUNNER_APP_NAME,
+            user_id=report_orchestrator._RUNNER_USER_ID,
+            session_id=session_id,
+        )
+        for _ in range(count):
+            event = Event(
+                author="user",
+                content=genai_types.Content(role="user", parts=[genai_types.Part(text="hi")]),
+            )
+            await service.append_event(session, event)
+
+    async def _load(service, session_id):
+        return await service.get_session(
+            app_name=report_orchestrator._RUNNER_APP_NAME,
+            user_id=report_orchestrator._RUNNER_USER_ID,
+            session_id=session_id,
+        )
+
+    asyncio.run(_append(service_a, session_id_a, 2))
+    asyncio.run(_append(service_b, session_id_b, 1))
+    final_a = asyncio.run(_load(service_a, session_id_a))
+    final_b = asyncio.run(_load(service_b, session_id_b))
+    asyncio.run(service_a.close())
+    asyncio.run(service_b.close())
+
+    assert len(final_a.events) == 2
+    assert len(final_b.events) == 1
