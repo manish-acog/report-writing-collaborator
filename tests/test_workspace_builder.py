@@ -274,6 +274,7 @@ def test_mixed_source_workspace_dispatches_both_normalizers(tmp_path: Path) -> N
         "id": "etr_1",
         "displayId": "EXP001",
         "name": "Notebook Entry",
+        "webURL": "https://x.benchling.com/x/notebook/entries/etr_1",
         "days": [{"date": "2026-01-01", "notes": [{"type": "text", "text": "Ran assay."}]}],
     }
     config = WorkspaceConfig(
@@ -309,6 +310,12 @@ def test_mixed_source_workspace_dispatches_both_normalizers(tmp_path: Path) -> N
     published_dir = config.publish_root / manifest.workspace_id / "1"
     for source in manifest.sources:
         assert (published_dir / source.normalized_path).is_file()
+
+    citation_urls = {s.source_instance_id: s.citation_url for s in manifest.sources}
+    assert citation_urls == {
+        "source_01": None,
+        "source_02": "https://x.benchling.com/x/notebook/entries/etr_1",
+    }
 
 
 def test_eln_source_without_credentials_fails_fast(tmp_path: Path) -> None:

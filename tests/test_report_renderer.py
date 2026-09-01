@@ -32,6 +32,7 @@ def _write_source(
     section_id: str,
     role: str | None = None,
     parent_source_id: str | None = None,
+    citation_url: str | None = None,
 ) -> dict[str, object]:
     source_dir = workspace / "sources" / source_id
     normalized_dir = workspace / "normalized" / source_id
@@ -66,6 +67,7 @@ def _write_source(
         "normalized_path": normalized_path,
         "sections_path": sections_path,
         "parent_source_id": parent_source_id,
+        "citation_url": citation_url,
     }
 
 
@@ -243,6 +245,35 @@ def test_render_non_pdf_page_is_plain_text(tmp_path: Path) -> None:
     assert "[Slides.pptx](sources/src_b/original.pptx)" in result
     assert "page 7" in result
     assert "original.pptx#page=" not in result
+
+
+def test_render_prefers_citation_url_for_eln_source(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    source = _write_source(
+        workspace,
+        "src_c",
+        "Entry.json",
+        "# Findings\nEvidence from entry.\n",
+        section_id="sec_c",
+        citation_url="https://benchling.com/entry/etr_123",
+    )
+    (workspace / "manifest.json").write_text(
+        json.dumps({"sources": [source]}),
+        encoding="utf-8",
+    )
+    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
+    values = {
+        "title": {
+            "status": "found",
+            "value": "Report",
+            "citations": [{"source_id": "src_c", "page": 1}],
+        }
+    }
+
+    result = render(template, values, workspace)
+
+    assert "(https://benchling.com/entry/etr_123)" in result
+    assert "sources/src_c/original.json" not in result
 
 
 def test_render_no_citations_uses_fallback_text(tmp_path: Path) -> None:

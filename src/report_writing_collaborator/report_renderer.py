@@ -42,6 +42,7 @@ class _Source:
     original_filename: str
     original_path: str
     parent_source_id: str | None
+    citation_url: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +246,7 @@ def _load_sources(workspace_root: Path) -> dict[str, _Source]:
             original_filename=_required_text(raw_source, "original_filename", "workspace source"),
             original_path=_required_text(raw_source, "original_path", "workspace source"),
             parent_source_id=_optional_text(raw_source, "parent_source_id", "workspace source"),
+            citation_url=_optional_text(raw_source, "citation_url", "workspace source"),
         )
         # Repeated content can produce multiple source instances with one
         # source_id. Citations identify content, so the first occurrence wins.
@@ -274,6 +276,9 @@ def _resolve_reference(
 
 
 def _source_href(source: _Source, page: int | None) -> str:
+    if source.citation_url:
+        return source.citation_url
+
     href = quote(source.original_path, safe="/")
     if page is not None and source.original_path.casefold().endswith(".pdf"):
         return f"{href}#page={page}"

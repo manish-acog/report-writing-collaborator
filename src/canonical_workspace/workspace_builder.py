@@ -66,6 +66,7 @@ class ManifestSource:
     normalized_path: str
     sections_path: str
     parent_source_id: str | None
+    citation_url: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +219,7 @@ def _build_in_staging(
                 normalized_path=normalized.normalized_path,
                 sections_path=sections_by_id[normalized.source_id],
                 parent_source_id=source.parent_source_id,
+                citation_url=_citation_url(item, normalized),
             )
         )
 
@@ -293,6 +295,14 @@ def _original_filename(item: _PendingSource, normalized: NormalizedDocument) -> 
         return str(name).strip() if name else source.entry_id
 
     return source.path.name
+
+
+def _citation_url(item: _PendingSource, normalized: NormalizedDocument) -> str | None:
+    if not isinstance(item.source, ElnSource):
+        return None
+
+    web_url = normalized.metadata.get("web_url")
+    return str(web_url).strip() if web_url else None
 
 
 def _attachment_instance_id(parent_instance_id: str, attachment_path: str) -> str:
