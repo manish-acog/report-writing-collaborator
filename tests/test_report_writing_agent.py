@@ -9,6 +9,8 @@ import pytest
 from google.adk.tools.skill_toolset import SkillToolset
 
 from report_writing_collaborator.agent.agent import (
+    _MAX_GREP_MATCHES,
+    _MAX_GREP_RESPONSE_CHARS,
     _MAX_READ_LINES,
     build_agent,
     make_workspace_tools,
@@ -156,6 +158,27 @@ def test_grep_workspace_context_lines_capped_at_max(tmp_path: Path) -> None:
     assert over_cap["matches"][0]["context"] == (
         "# Title\n\nBody mentions apples and oranges."
     )
+
+
+def test_grep_workspace_caps_total_response_chars_before_match_count(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    # ~207 chars/line; with context_lines=0, "context" equals "line", so
+    # each match contributes ~414 chars -- the budget trips around match 49,
+    # well short of _MAX_GREP_MATCHES, proving the size cap (not the count
+    # cap) is what stops this specific pathological case.
+    long_line = "TARGET " + ("x" * 200)
+    (workspace / "normalized" / "src_a" / "wide.md").write_text(
+        "\n".join(long_line for _ in range(300)), encoding="utf-8"
+    )
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
+
+    result = grep_workspace("TARGET", glob_pattern="**/wide.md", context_lines=0)
+
+    assert result["status"] == "success"
+    assert result["truncated"] is True
+    assert len(result["matches"]) < _MAX_GREP_MATCHES
+    total_chars = sum(len(m["line"]) + len(m["context"]) for m in result["matches"])
+    assert total_chars >= _MAX_GREP_RESPONSE_CHARS
 
 
 def test_read_workspace_file_returns_content(tmp_path: Path) -> None:

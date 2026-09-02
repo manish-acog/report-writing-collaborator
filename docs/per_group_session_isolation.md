@@ -96,6 +96,18 @@ regardless of how many fire together — bounds the worst case
 deterministically; a model wanting more issues another call with a later
 `offset`, the same progressive-widening pattern already established.
 
+**One broad `grep_workspace` call.** A single call_group's first turn
+issuing `grep_workspace(pattern="A|B|C|...", glob_pattern="**/*",
+context_lines=3)` — a wide OR-pattern across every workspace file — hit a
+TPM rejection on its own, faster than the original gradual-accumulation
+failure this doc otherwise fixes: 198 matches, 500K+ combined characters
+in one response, well inside a single call_group. `_MAX_GREP_MATCHES`
+alone didn't bound this — a fixed match count says nothing about how
+much text each match carries. `_MAX_GREP_RESPONSE_CHARS` stops
+collection once the combined `line`+`context` text crosses the budget,
+regardless of match count or line length, the same principle as
+`_MAX_READ_LINES`.
+
 **Debugging a run afterward.** `sessions.db` shows N independent turns,
 each inspectable on its own — arguably clearer than before, since a
 group's own session isn't tangled with nine others' history to page
@@ -154,6 +166,26 @@ through.
   — the exact progressive-widening pattern `read_workspace_file` was
   already designed around.
 
+### `grep_workspace` caps total response characters, not only match count
+
+- **Options:** A — lower `_MAX_GREP_MATCHES` further (from 200), hoping a
+  smaller count bounds worst-case size well enough in practice. B —
+  truncate each match's `line`/`context` field to a fixed length,
+  independent of total match count. C (chosen) — track combined
+  `line`+`context` characters across all matches; stop once
+  `_MAX_GREP_RESPONSE_CHARS` is crossed, same trigger shape as the
+  existing match-count cap.
+- **Chose:** C.
+- **Consequences:** bounds the worst case regardless of match count *or*
+  line length — the actual failure (198 matches, 500K+ characters) was
+  within the existing count cap the whole time; only a size-based check
+  catches it. A alone would still fail for wide OR-patterns with long
+  matched lines; B alone would still fail for many-small-matches (JSON
+  overhead across hundreds of short entries). Kept `_MAX_GREP_MATCHES` as
+  a second, cheap backstop for that many-small-matches case — the two
+  caps defend different degenerate shapes, not redundant with each
+  other.
+
 ## Not doing
 
 - **ADK-native compaction (`EventsCompactionConfig`)** — considered,
@@ -175,6 +207,13 @@ through.
   skill** (more than 10 groups, more than 61 fields) — not a concern at
   today's scale, per the quantified estimate above; revisit only if a
   future skill's shape changes that math materially.
+- **Exact value for `_MAX_GREP_RESPONSE_CHARS`.** Set at 20,000 by
+  order-of-magnitude reasoning against the observed 500K+ character
+  failure, not by measuring real Cayuse/large-table document
+  characteristics. Generous enough for the "cheap context across many
+  matches" purpose at today's scale; revisit if a legitimate narrow
+  search still needs more matches than the budget allows before finding
+  what it's looking for.
 
 ## Next
 
@@ -247,3 +286,22 @@ measuring live token counts against a real model),
 `test_read_workspace_file_caps_lines_even_without_limit`, and
 `test_read_workspace_file_caps_limit_above_max`. Full preflight run
 after: 150 passed, `ruff check .` clean, `ty check src` clean.
+
+**Addendum: `grep_workspace` response-size cap.** Deployed the above,
+then hit a second, sharper production failure — a single call_group's
+first turn issued one broad `grep_workspace` call (`glob_pattern="**/*"`,
+wide OR-pattern) that alone returned 198 matches, 500K+ characters, a
+hard TPM rejection ~30 seconds in. `_MAX_GREP_MATCHES` (200) never
+engaged; it bounds count, not size. Added `_MAX_GREP_RESPONSE_CHARS =
+20_000`: `grep_workspace` now tracks combined `line`+`context`
+characters across matches and stops, marking `truncated: true`, once
+that budget is crossed — same trigger shape as the existing count cap,
+bounding the worst case regardless of match count or line length.
+`_MAX_GREP_MATCHES` kept as a second backstop for many-small-matches,
+which a size budget alone doesn't cap as cheaply (JSON overhead per
+match). Regression test:
+`test_grep_workspace_caps_total_response_chars_before_match_count` — a
+300-line file of long matching lines truncates well short of 200
+matches, proving the size cap (not the count cap) is what stops it.
+Full preflight after: 151 passed, `ruff check .` clean, `ty check src`
+clean.

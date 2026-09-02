@@ -35,8 +35,17 @@ if TYPE_CHECKING:
 SKILLS_DIR = Path(__file__).parent / "skills"
 DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 _MAX_GREP_MATCHES = 200
-_DEFAULT_CONTEXT_LINES = 2
+# grep_workspace's count cap alone wasn't enough: a broad OR-pattern across
+# glob_pattern="**/*" hit 198 matches whose combined line+context text was
+# 500K+ characters (~130-150K tokens) in one response -- a hard TPM
+# rejection from a single call_group's first turn, faster than the
+# gradual-accumulation failure per-group session isolation already fixed
+# (docs/per_group_session_isolation.md). This bounds the worst case
+# regardless of match count or line length, the same principle as
+# read_workspace_file's _MAX_READ_LINES.
+_MAX_GREP_RESPONSE_CHARS = 20_000
 _MAX_CONTEXT_LINES = 3
+_DEFAULT_CONTEXT_LINES = 2
 # Bounds the worst case regardless of model behavior: seven parallel,
 # unbounded reads of large documents is what actually produced a hard
 # TPM rejection in production (docs/per_group_session_isolation.md).
@@ -171,9 +180,12 @@ def make_workspace_tools(
             through context_lines after the matched line, joined by
             newlines -- "section_id", "source_pages" -- the latter two
             are null when the match isn't inside a normalized document
-            with a section index, e.g. manifest.json), capped at 200
-            matches, plus "truncated". On an invalid pattern, "status" is
-            "error" and "error_message" explains why.
+            with a section index, e.g. manifest.json), plus "truncated".
+            Capped at 200 matches or _MAX_GREP_RESPONSE_CHARS combined
+            "line"+"context" characters, whichever is hit first -- a broad
+            pattern across many files can blow the character budget well
+            before 200 matches. On an invalid pattern, "status" is "error"
+            and "error_message" explains why.
         """
         try:
             compiled = re.compile(pattern)
@@ -183,6 +195,7 @@ def make_workspace_tools(
         context_lines = max(0, min(context_lines, _MAX_CONTEXT_LINES))
 
         matches: list[dict] = []
+        response_chars = 0
         for path in sorted(workspace_root.glob(glob_pattern)):
             if not path.is_file() or not _within_root(path, workspace_root):
                 continue
@@ -200,15 +213,17 @@ def make_workspace_tools(
                 section = _section_at_line(source_id, line_number) if source_id else None
                 context_start = max(index - context_lines, 0)
                 context_end = min(index + context_lines + 1, len(lines))
+                context = "\n".join(lines[context_start:context_end])
                 matches.append({
                     "path": relative,
                     "line_number": line_number,
                     "line": line,
-                    "context": "\n".join(lines[context_start:context_end]),
+                    "context": context,
                     "section_id": section["section_id"] if section else None,
                     "source_pages": section["source_pages"] if section else None,
                 })
-                if len(matches) >= _MAX_GREP_MATCHES:
+                response_chars += len(line) + len(context)
+                if len(matches) >= _MAX_GREP_MATCHES or response_chars >= _MAX_GREP_RESPONSE_CHARS:
                     return {"status": "success", "matches": matches, "truncated": True}
 
         return {"status": "success", "matches": matches, "truncated": False}
