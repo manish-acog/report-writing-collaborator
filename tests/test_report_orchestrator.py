@@ -16,22 +16,32 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _make_skill_dir(root: Path, name: str, description: str, instructions: str) -> Path:
+def _make_skill_dir(
+    root: Path,
+    name: str,
+    description: str,
+    instructions: str,
+    requires_skills: list[str] | None = None,
+) -> Path:
     skill_dir = root / name
     skill_dir.mkdir(parents=True)
+    metadata = (
+        f"metadata:\n  requires_skills: {json.dumps(requires_skills)}\n" if requires_skills else ""
+    )
     (skill_dir / "SKILL.md").write_text(
-        f"---\nname: {name}\ndescription: {description}\n---\n\n{instructions}\n",
+        f"---\nname: {name}\ndescription: {description}\n{metadata}---\n\n{instructions}\n",
         encoding="utf-8",
     )
     return skill_dir
 
 
-def _make_report_skill(skills_dir: Path) -> Path:
+def _make_report_skill(skills_dir: Path, requires_skills: list[str] | None = None) -> Path:
     skill_dir = _make_skill_dir(
         skills_dir,
         "general-report-writing",
         "Writes a structured report.",
         "Build structure first, then extract fields with citations.",
+        requires_skills=requires_skills,
     )
     (skill_dir / "variables.json").write_text(
         json.dumps(
@@ -340,6 +350,105 @@ def test_write_report_persists_partial_values_before_a_later_group_fails(
             "citations": [{"source_id": "src_a", "page": 1}],
         }
     }
+
+
+def test_write_report_wires_requires_skills_into_bootstrap_and_bounded_agents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    _make_skill_dir(skills_dir, "domain-understanding", "Reads a source.", "Read carefully.")
+    _make_report_skill(skills_dir, requires_skills=["domain-understanding"])
+    workspace = _make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
+
+    real_bootstrap = report_orchestrator._build_bootstrap_agent
+    real_bounded = report_orchestrator._build_bounded_agent
+    built_bootstrap_agents: list = []
+    built_bounded_agents: list = []
+
+    def _spy_bootstrap(*args: object, **kwargs: object) -> object:
+        agent = real_bootstrap(*args, **kwargs)
+        built_bootstrap_agents.append(agent)
+        return agent
+
+    def _spy_bounded(*args: object, **kwargs: object) -> object:
+        agent = real_bounded(*args, **kwargs)
+        built_bounded_agents.append(agent)
+        return agent
+
+    with (
+        patch.object(report_orchestrator, "_build_bootstrap_agent", side_effect=_spy_bootstrap),
+        patch.object(report_orchestrator, "_build_bounded_agent", side_effect=_spy_bounded),
+        patch.object(
+            report_orchestrator,
+            "_run_bounded_call",
+            return_value={"title": {"status": "not_found"}, "conclusion": {"status": "not_found"}},
+        ),
+    ):
+        report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
+
+    bootstrap_toolset = next(
+        tool for tool in built_bootstrap_agents[0].tools if isinstance(tool, SkillToolset)
+    )
+    bounded_toolset = next(
+        tool for tool in built_bounded_agents[0].tools if isinstance(tool, SkillToolset)
+    )
+    assert [skill.frontmatter.name for skill in bootstrap_toolset.skills] == [
+        "workspace-summary",
+        "domain-understanding",
+    ]
+    assert [skill.frontmatter.name for skill in bounded_toolset.skills] == [
+        "evidence-grounding",
+        "domain-understanding",
+    ]
+
+
+def test_write_report_defaults_to_no_extra_skills_when_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    _make_report_skill(skills_dir)
+    workspace = _make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
+
+    real_bootstrap = report_orchestrator._build_bootstrap_agent
+    real_bounded = report_orchestrator._build_bounded_agent
+    built_bootstrap_agents: list = []
+    built_bounded_agents: list = []
+
+    def _spy_bootstrap(*args: object, **kwargs: object) -> object:
+        agent = real_bootstrap(*args, **kwargs)
+        built_bootstrap_agents.append(agent)
+        return agent
+
+    def _spy_bounded(*args: object, **kwargs: object) -> object:
+        agent = real_bounded(*args, **kwargs)
+        built_bounded_agents.append(agent)
+        return agent
+
+    with (
+        patch.object(report_orchestrator, "_build_bootstrap_agent", side_effect=_spy_bootstrap),
+        patch.object(report_orchestrator, "_build_bounded_agent", side_effect=_spy_bounded),
+        patch.object(
+            report_orchestrator,
+            "_run_bounded_call",
+            return_value={"title": {"status": "not_found"}, "conclusion": {"status": "not_found"}},
+        ),
+    ):
+        report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
+
+    bootstrap_toolset = next(
+        tool for tool in built_bootstrap_agents[0].tools if isinstance(tool, SkillToolset)
+    )
+    bounded_toolset = next(
+        tool for tool in built_bounded_agents[0].tools if isinstance(tool, SkillToolset)
+    )
+    assert [skill.frontmatter.name for skill in bootstrap_toolset.skills] == ["workspace-summary"]
+    assert [skill.frontmatter.name for skill in bounded_toolset.skills] == ["evidence-grounding"]
 
 
 

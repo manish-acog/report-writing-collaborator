@@ -48,6 +48,7 @@ from report_writing_collaborator import build_output_schema, load_variables_conf
 from report_writing_collaborator.agent.agent import DEFAULT_MODEL, SKILLS_DIR, make_workspace_tools
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from google.adk.sessions import BaseSessionService
@@ -61,6 +62,7 @@ _VARIABLES_FILE_NAME = "variables.json"
 _TEMPLATES_DIR_NAME = "templates"
 _STRUCTURE_SKILL_NAME = "workspace-summary"
 _GROUNDING_SKILL_NAME = "evidence-grounding"
+_REQUIRES_SKILLS_KEY = "requires_skills"
 _EXTRACTOR_AGENT_NAME = "report_field_extractor"
 _OUTPUT_KEY = "result"
 _RUNNER_APP_NAME = "report_orchestrator"
@@ -139,11 +141,13 @@ def write_report(
     skill = load_skill_from_dir(skill_dir)
     structure_skill = load_skill_from_dir(SKILLS_DIR / _STRUCTURE_SKILL_NAME)
     grounding_skill = load_skill_from_dir(SKILLS_DIR / _GROUNDING_SKILL_NAME)
+    extra_skill_names = skill.frontmatter.metadata.get(_REQUIRES_SKILLS_KEY, [])
+    extra_skills = [load_skill_from_dir(SKILLS_DIR / name) for name in extra_skill_names]
     config = load_variables_config(skill_dir / _VARIABLES_FILE_NAME)
 
     session_service, session_id = _build_session(task_dir)
 
-    bootstrap_agent = _build_bootstrap_agent(workspace_root, model, structure_skill)
+    bootstrap_agent = _build_bootstrap_agent(workspace_root, model, structure_skill, extra_skills)
     _run_bounded_call(
         bootstrap_agent, session_service, session_id, _BOOTSTRAP_PROMPT, expect_output=False
     )
@@ -152,7 +156,9 @@ def write_report(
     for call_group in config.call_groups:
         schema = build_output_schema(call_group)
         instruction = _build_instruction(skill, call_group)
-        agent = _build_bounded_agent(workspace_root, model, schema, instruction, grounding_skill)
+        agent = _build_bounded_agent(
+            workspace_root, model, schema, instruction, grounding_skill, extra_skills
+        )
         values.update(_run_bounded_call(agent, session_service, session_id, _EXTRACTION_PROMPT))
         # Overwritten after every turn, not only at the end: a later
         # call_group failing after retries exhaust still leaves everything
@@ -341,11 +347,12 @@ def _build_bootstrap_agent(
     workspace_root: Path,
     model: str,
     structure_skill: Skill,
+    extra_skills: Sequence[Skill] = (),
 ) -> LlmAgent:
     """Builds the once-per-run agent that primes the shared session with workspace structure."""
     tools: list[object] = [
         *make_workspace_tools(workspace_root, agent_model=model),
-        SkillToolset(skills=[structure_skill]),
+        SkillToolset(skills=[structure_skill, *extra_skills]),
     ]
     return LlmAgent(
         model=LiteLlm(model=model),
@@ -361,10 +368,11 @@ def _build_bounded_agent(
     output_schema: type[BaseModel],
     instruction: str,
     grounding_skill: Skill,
+    extra_skills: Sequence[Skill] = (),
 ) -> LlmAgent:
     tools: list[object] = [
         *make_workspace_tools(workspace_root, agent_model=model),
-        SkillToolset(skills=[grounding_skill]),
+        SkillToolset(skills=[grounding_skill, *extra_skills]),
     ]
     return LlmAgent(
         model=LiteLlm(model=model),
