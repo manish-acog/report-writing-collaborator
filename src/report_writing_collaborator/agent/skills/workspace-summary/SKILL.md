@@ -28,11 +28,12 @@ evidence.
 3. **Read the content.** For a general summary, read each source's
    normalized Markdown (`normalized_path`) in full — the complete document
    text, headed by `#`/`##`/... section markers. For a narrow question,
-   call `list_sections` first to see a source's table of contents, then
-   `read_section` for just the section(s) the question turns on — or
-   `grep_workspace` to locate the right spot first when the answer's
-   location isn't obvious from titles alone. Avoid reading a whole
-   document when only a fraction of it is relevant.
+   use `grep_workspace` — its surrounding context (`context_lines`,
+   default 2) usually covers a prompt-and-answer or claim-and-detail pair
+   in one call — then `read_workspace_file` with `offset`/`limit` to pull
+   more around a confirmed-relevant spot if the match's own context isn't
+   enough. Avoid reading a whole document when only a fraction of it is
+   relevant.
 4. **Write the output.** For a general summary, open with the structural
    picture built in step 1 (source tree, roles, asset and image counts),
    then give per-source content, folding in what step 2 found about each
@@ -44,10 +45,11 @@ evidence.
 
 Every factual claim must cite the `source_id` it came from and, when the
 claim traces to a specific page, the page number(s). Page numbers for a
-section come from that source's section index — `list_sections`,
-`read_section`, and `grep_workspace` all already surface `source_pages`
-directly; read `document.sections.json` via `read_workspace_file` only if
-you need a field they don't already give you. An `inspect_image` result is
+section come from `grep_workspace`'s own match output — it already
+surfaces `source_pages` directly; read a source's
+`document.sections.json` via `read_workspace_file` only for a genuine
+structural-discovery need (e.g. a full table of contents), not as the
+default way to find a page number. An `inspect_image` result is
 evidence like any other: cite the image's path and its source_id. Don't
 state something the source text or an image doesn't support — say what's
 missing instead of guessing.

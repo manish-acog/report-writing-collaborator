@@ -30,6 +30,14 @@ more time in flight is more exposure to a mid-request connection reset —
 so shrinking bootstrap's payload and bounding individual request time are
 complementary fixes for the same live incident, not competing ones.
 
+> **Superseded:** `list_sections`/`read_section` (this Shape section, and
+> the Decisions/Implementation sections describing them) are removed by
+> `docs/workspace_search_tools.md` — real use surfaced a document shape
+> (many small sections) these tools handled poorly. Replaced by
+> `grep_workspace`'s `context_lines` and `read_workspace_file`'s
+> `offset`/`limit`. Kept here for history; the reasoning for shrinking
+> bootstrap's payload in the first place is unchanged.
+
 ## Shape
 
 - **`make_workspace_tools`** (`agent.py`) — gains two tools, over data

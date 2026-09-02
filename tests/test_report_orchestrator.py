@@ -127,8 +127,6 @@ def test_build_bounded_agent_has_schema_and_grounding_skill(tmp_path: Path) -> N
         "grep_workspace",
         "read_workspace_file",
         "inspect_image",
-        "list_sections",
-        "read_section",
         "SkillToolset",
     }
     skill_toolset = next(tool for tool in agent.tools if isinstance(tool, SkillToolset))
@@ -153,8 +151,6 @@ def test_build_bootstrap_agent_has_no_schema_and_structure_skill(tmp_path: Path)
         "grep_workspace",
         "read_workspace_file",
         "inspect_image",
-        "list_sections",
-        "read_section",
         "SkillToolset",
     }
     skill_toolset = next(tool for tool in agent.tools if isinstance(tool, SkillToolset))

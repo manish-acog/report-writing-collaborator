@@ -11,12 +11,12 @@ fields for this call are listed at the end of your instructions.
 
 ## Steps
 
-1. This session's first turn already indexed the workspace via
-   `workspace-summary` — source tree plus, per section, title, heading
-   path, and page range. Use that index to identify which sections this
-   call's fields need, then fetch exactly those via `list_sections`/
-   `read_section`, or `grep_workspace` for a narrow lookup — full section
-   text is not preloaded.
+1. This session's first turn already built the source tree via
+   `workspace-summary` — sources, roles, hierarchy, no per-source section
+   index. Use `grep_workspace` (its surrounding context usually covers a
+   claim in one call) to find what this call's fields need, then
+   `read_workspace_file` with `offset`/`limit` to pull more around a
+   confirmed-relevant spot if needed.
 2. Load the `evidence-grounding` skill and apply its status, citation,
    image-evidence, and writing-style rules to every field.
 3. Keep **results** and **discussion** strictly separate: state findings

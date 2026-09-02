@@ -47,7 +47,7 @@ def _make_workspace(root: Path) -> Path:
 
 def test_glob_workspace_lists_matching_files(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    glob_workspace, _, _, _, _, _ = make_workspace_tools(workspace)
+    glob_workspace, _, _, _ = make_workspace_tools(workspace)
 
     result = glob_workspace("normalized/*/document.md")
 
@@ -58,7 +58,7 @@ def test_glob_workspace_lists_matching_files(tmp_path: Path) -> None:
 def test_glob_workspace_rejects_traversal_outside_root(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path / "workspace")
     (tmp_path / "secret.txt").write_text("outside", encoding="utf-8")
-    glob_workspace, _, _, _, _, _ = make_workspace_tools(workspace)
+    glob_workspace, _, _, _ = make_workspace_tools(workspace)
 
     result = glob_workspace("../secret.txt")
 
@@ -68,7 +68,7 @@ def test_glob_workspace_rejects_traversal_outside_root(tmp_path: Path) -> None:
 
 def test_grep_workspace_finds_matching_lines(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, grep_workspace, _, _, _, _ = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
     result = grep_workspace("apples", glob_pattern="**/*.md")
 
@@ -85,7 +85,7 @@ def test_grep_workspace_leaves_section_fields_null_outside_normalized_docs(
     tmp_path: Path,
 ) -> None:
     workspace = _make_workspace(tmp_path)
-    _, grep_workspace, _, _, _, _ = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
     result = grep_workspace("workspace_id", glob_pattern="manifest.json")
 
@@ -96,7 +96,7 @@ def test_grep_workspace_leaves_section_fields_null_outside_normalized_docs(
 
 def test_grep_workspace_reports_invalid_pattern(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, grep_workspace, _, _, _, _ = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
     result = grep_workspace("(unclosed")
 
@@ -104,69 +104,59 @@ def test_grep_workspace_reports_invalid_pattern(tmp_path: Path) -> None:
     assert "Invalid pattern" in result["error_message"]
 
 
-def test_list_sections_returns_table_of_contents(tmp_path: Path) -> None:
+def test_grep_workspace_default_context_includes_surrounding_lines(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    *_, list_sections, _ = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
-    result = list_sections("src_a")
+    result = grep_workspace("apples", glob_pattern="**/*.md")
 
-    assert result["status"] == "success"
-    assert result["sections"] == [
-        {
-            "section_id": "sec_title",
-            "title": "Title",
-            "heading_path": ["Title"],
-            "source_pages": [1],
-        }
-    ]
+    # Line 3 (the match) with default context_lines=2: lines 1-3 (no line 4).
+    assert result["matches"][0]["context"] == (
+        "# Title\n\nBody mentions apples and oranges."
+    )
 
 
-def test_list_sections_reports_unknown_source(tmp_path: Path) -> None:
+def test_grep_workspace_context_clamps_at_start_of_file(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    *_, list_sections, _ = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
-    result = list_sections("src_missing")
+    # Match on line 1: context_lines=2 would need lines -1..3 uncapped;
+    # clamped to the file's actual start, line 1.
+    result = grep_workspace("Title", glob_pattern="**/*.md")
 
-    assert result["status"] == "error"
-    assert "No section index" in result["error_message"]
+    assert result["matches"][0]["context"] == (
+        "# Title\n\nBody mentions apples and oranges."
+    )
 
 
-def test_read_section_returns_section_content(tmp_path: Path) -> None:
+def test_grep_workspace_context_lines_zero_returns_only_matched_line(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    *_, read_section = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
-    result = read_section("src_a", "sec_title")
+    result = grep_workspace("apples", glob_pattern="**/*.md", context_lines=0)
 
-    assert result["status"] == "success"
-    assert result["title"] == "Title"
-    assert result["heading_path"] == ["Title"]
-    assert result["source_pages"] == [1]
-    assert result["content"] == "# Title\n\nBody mentions apples and oranges."
+    assert result["matches"][0]["context"] == "Body mentions apples and oranges."
 
 
-def test_read_section_reports_unknown_source(tmp_path: Path) -> None:
+def test_grep_workspace_context_lines_capped_at_max(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    *_, read_section = make_workspace_tools(workspace)
+    _, grep_workspace, _, _ = make_workspace_tools(workspace)
 
-    result = read_section("src_missing", "sec_title")
+    uncapped = grep_workspace("apples", glob_pattern="**/*.md", context_lines=0)
+    over_cap = grep_workspace("apples", glob_pattern="**/*.md", context_lines=99)
 
-    assert result["status"] == "error"
-    assert "No section index" in result["error_message"]
-
-
-def test_read_section_reports_unknown_section(tmp_path: Path) -> None:
-    workspace = _make_workspace(tmp_path)
-    *_, read_section = make_workspace_tools(workspace)
-
-    result = read_section("src_a", "sec_missing")
-
-    assert result["status"] == "error"
-    assert "Unknown section_id" in result["error_message"]
+    # context_lines=99 caps at 3, same as passing 3 -- both bounded by the
+    # 3-line file, so identical here; the cap itself is exercised by not
+    # raising and not silently returning the whole file for a huge value.
+    assert over_cap["matches"][0]["context"] != uncapped["matches"][0]["context"]
+    assert over_cap["matches"][0]["context"] == (
+        "# Title\n\nBody mentions apples and oranges."
+    )
 
 
 def test_read_workspace_file_returns_content(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, _, read_workspace_file, _, _, _ = make_workspace_tools(workspace)
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
 
     result = read_workspace_file("manifest.json")
 
@@ -177,7 +167,7 @@ def test_read_workspace_file_returns_content(tmp_path: Path) -> None:
 def test_read_workspace_file_rejects_path_traversal(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path / "workspace")
     (tmp_path / "secret.txt").write_text("outside", encoding="utf-8")
-    _, _, read_workspace_file, _, _, _ = make_workspace_tools(workspace)
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
 
     result = read_workspace_file("../secret.txt")
 
@@ -187,12 +177,41 @@ def test_read_workspace_file_rejects_path_traversal(tmp_path: Path) -> None:
 
 def test_read_workspace_file_reports_missing_file(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, _, read_workspace_file, _, _, _ = make_workspace_tools(workspace)
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
 
     result = read_workspace_file("normalized/does-not-exist.md")
 
     assert result["status"] == "error"
     assert "Not a file" in result["error_message"]
+
+
+def test_read_workspace_file_offset_and_limit_returns_partial_content(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
+
+    result = read_workspace_file("normalized/src_a/document.md", offset=3, limit=1)
+
+    assert result["status"] == "success"
+    assert result["content"] == "Body mentions apples and oranges."
+
+
+def test_read_workspace_file_offset_without_limit_reads_to_end(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
+
+    result = read_workspace_file("normalized/src_a/document.md", offset=2)
+
+    assert result["content"] == "\nBody mentions apples and oranges."
+
+
+def test_read_workspace_file_offset_beyond_eof_returns_empty(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
+
+    result = read_workspace_file("normalized/src_a/document.md", offset=100, limit=10)
+
+    assert result["status"] == "success"
+    assert result["content"] == ""
 
 
 def _fake_response(text: str) -> object:
@@ -204,7 +223,7 @@ def _fake_response(text: str) -> object:
 def test_inspect_image_returns_description(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("REPORT_AGENT_VISION_MODEL", raising=False)
     workspace = _make_workspace(tmp_path)
-    _, _, _, inspect_image, _, _ = make_workspace_tools(
+    _, _, _, inspect_image = make_workspace_tools(
         workspace, agent_model="anthropic/claude-sonnet-5"
     )
 
@@ -228,7 +247,7 @@ def test_inspect_image_returns_description(tmp_path: Path, monkeypatch: pytest.M
 
 def test_inspect_image_uses_default_question_when_omitted(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    _, _, _, inspect_image = make_workspace_tools(workspace)
 
     with patch(
         "report_writing_collaborator.agent.agent.litellm.acompletion",
@@ -243,7 +262,7 @@ def test_inspect_image_uses_default_question_when_omitted(tmp_path: Path) -> Non
 def test_inspect_image_rejects_path_traversal(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path / "workspace")
     (tmp_path / "secret.png").write_bytes(b"\x89PNG")
-    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    _, _, _, inspect_image = make_workspace_tools(workspace)
 
     result = asyncio.run(inspect_image("../secret.png"))
 
@@ -253,7 +272,7 @@ def test_inspect_image_rejects_path_traversal(tmp_path: Path) -> None:
 
 def test_inspect_image_reports_missing_file(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    _, _, _, inspect_image = make_workspace_tools(workspace)
 
     result = asyncio.run(inspect_image("assets/src_a/images/does-not-exist.png"))
 
@@ -264,7 +283,7 @@ def test_inspect_image_reports_missing_file(tmp_path: Path) -> None:
 def test_inspect_image_rejects_unsupported_format(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
     (workspace / "assets" / "src_a" / "images" / "scan.tiff").write_bytes(b"II*\x00")
-    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    _, _, _, inspect_image = make_workspace_tools(workspace)
 
     result = asyncio.run(inspect_image("assets/src_a/images/scan.tiff"))
 
@@ -274,7 +293,7 @@ def test_inspect_image_rejects_unsupported_format(tmp_path: Path) -> None:
 
 def test_inspect_image_reports_model_call_failure(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    _, _, _, inspect_image = make_workspace_tools(workspace)
 
     with patch(
         "report_writing_collaborator.agent.agent.litellm.acompletion",
@@ -291,7 +310,7 @@ def test_inspect_image_prefers_vision_model_env_override(
 ) -> None:
     monkeypatch.setenv("REPORT_AGENT_VISION_MODEL", "openai/gpt-4o")
     workspace = _make_workspace(tmp_path)
-    _, _, _, inspect_image, _, _ = make_workspace_tools(
+    _, _, _, inspect_image = make_workspace_tools(
         workspace, agent_model="anthropic/claude-sonnet-5"
     )
 
@@ -307,7 +326,7 @@ def test_inspect_image_prefers_vision_model_env_override(
 
 def test_inspect_image_calls_overlap_concurrently(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
-    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    _, _, _, inspect_image = make_workspace_tools(workspace)
     call_count = 3
     delay_seconds = 0.2
 
@@ -339,15 +358,13 @@ def test_build_agent_constructs_without_llm_call(tmp_path: Path) -> None:
     agent = build_agent(workspace, model="anthropic/claude-sonnet-5")
 
     assert agent.name == "report_writing_agent"
-    assert len(agent.tools) == 7
+    assert len(agent.tools) == 5
     tool_names = {getattr(tool, "__name__", type(tool).__name__) for tool in agent.tools}
     assert tool_names == {
         "glob_workspace",
         "grep_workspace",
         "read_workspace_file",
         "inspect_image",
-        "list_sections",
-        "read_section",
         "SkillToolset",
     }
 

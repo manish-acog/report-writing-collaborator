@@ -23,6 +23,18 @@ inconsistent (h1 through h4, sometimes nested under an unrelated parent) —
 read `document.sections.json`'s `heading_path`/`parent_section_id`, not the
 raw `#` level, to know what's actually nested under what.
 
+## Search, don't browse
+
+This document shape is why `docs/workspace_search_tools.md` exists: roughly 200
+sections, one per form question rather than per topic, makes browsing a
+structural table of contents expensive and searching past it cheap. Prefer
+`grep_workspace` for a known term from the vocabulary below (protocol
+number, pain category, route of administration, ...) — its surrounding
+context usually returns the form prompt and its answer in one call. Fall
+back to reading `document.sections.json` directly (via
+`read_workspace_file`) only for a genuine, rare structural-discovery need
+— not as the default way to find a field.
+
 ## Prompt-then-answer layout
 
 A bold line (`#### **Some question text**`) is Cayuse's form prompt, not

@@ -20,8 +20,8 @@ an HTTP request timeout and retry count (RunConfig.http_options), so a
 reset or stalled connection fails loud instead of hanging forever. See
 docs/general_report_writing.md, docs/extraction_session_persistence.md,
 docs/citation_marker_retry.md, docs/task_run_artifacts.md,
-docs/table_variable_type.md, and docs/model_call_reliability.md for the
-design.
+docs/table_variable_type.md, docs/model_call_reliability.md, and
+docs/workspace_search_tools.md for the design.
 """
 
 from __future__ import annotations
@@ -89,13 +89,14 @@ _MODEL_CALL_RUN_CONFIG = RunConfig(
 )
 _EXTRACTION_PROMPT = "Extract the fields listed in your instructions from this workspace."
 _BOOTSTRAP_PROMPT = (
-    "Load the `workspace-summary` skill, but build only an index this turn, "
-    "not a full read: the source tree (roles, hierarchy), and for every "
-    "source, its sections via `list_sections` -- title, heading path, and "
-    "page range per section. Do not read full section text and do not "
-    "inspect images in this pass; the extraction calls that follow in this "
-    "same session use `list_sections`/`read_section`/`grep_workspace` to "
-    "fetch exactly the evidence each one needs, when it needs it."
+    "Load the `workspace-summary` skill, but build only the source tree this "
+    "turn, not a full read: sources, their roles, and their hierarchy from "
+    "`manifest.json`. Do not enumerate any source's sections, read full "
+    "document text, or inspect images in this pass; the extraction calls "
+    "that follow in this same session grep and read on demand -- "
+    "`grep_workspace` (with surrounding context) and `read_workspace_file` "
+    "(with offset/limit against a confirmed-relevant spot) fetch exactly "
+    "the evidence each one needs, when it needs it."
 )
 
 
