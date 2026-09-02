@@ -41,7 +41,7 @@ _SUPPORTED_TYPES = _PDF_TYPES | _OFFICE_TYPES
 # pymupdf4llm's own default, now explicit: the size filter below needs a
 # fixed, known value to convert a page's point size into pixels.
 _IMAGE_DPI = 150
-# Below this fraction of its page's width AND height (both, not either), an
+# Below this fraction of its page's width OR height (either, not both), an
 # extracted image is treated as decorative, not content
 # (docs/pdf_image_extraction_limits.md).
 _IMAGE_SIZE_RATIO = 0.10
@@ -741,6 +741,10 @@ def _sha256(path: Path) -> str:
 def _is_undersized_image(path: Path, document: pymupdf.Document) -> bool:
     """True if path is a pymupdf4llm-extracted image under _IMAGE_SIZE_RATIO of its page.
 
+    Either dimension alone is enough to filter -- not both required. Catches
+    a wide-but-short banner (e.g. a letterhead) whose width clears the ratio
+    even though its height doesn't, not just a small-in-both-dimensions icon.
+
     Applied post-write, not via any pymupdf4llm kwarg -- image_size_limit is
     silently discarded under the active layout engine (see _parse_pdf).
     Recovers which page a file belongs to from its filename, an internal
@@ -766,5 +770,5 @@ def _is_undersized_image(path: Path, document: pymupdf.Document) -> bool:
     pixmap = pymupdf.Pixmap(str(path))
     return (
         pixmap.width < page_width * _IMAGE_SIZE_RATIO
-        and pixmap.height < page_height * _IMAGE_SIZE_RATIO
+        or pixmap.height < page_height * _IMAGE_SIZE_RATIO
     )

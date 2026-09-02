@@ -225,13 +225,19 @@ Full preflight run (before the `and`/`or` correction above): 141 passed,
 
 ## Next
 
-In `_is_undersized_image`, change the filter condition from `and` to
-`or`: exclude a file when its pixel width falls under 10% of the page's
-full-page-equivalent width, **or** its pixel height falls under 10% of
-the page's full-page-equivalent height — either alone is sufficient, not
-both required. Update the function's docstring/comment accordingly (it
-currently states "both, not either"). Add a regression test for the case
-the `and` version missed: a synthetic image wide relative to its page but
-short (e.g. width at 90% of page width, height at 5%) must be filtered;
-confirm the existing "real content image survives" case (large in both
-dimensions) still passes under `or`. Full preflight after.
+Done. `_is_undersized_image` now excludes a file when its pixel width
+**or** height falls under 10% of the page's full-page-equivalent
+dimension — either alone is sufficient. Docstring and the
+`_IMAGE_SIZE_RATIO` comment updated to say "either, not both". New
+regression test `test_collect_assets_filters_wide_but_short_banner`: a
+750x15px banner on a 400x200pt page (width clears 10%, height doesn't) is
+filtered; a 600x300px image on the same page (large in both dimensions)
+still survives. Existing `test_collect_assets_filters_undersized_images`
+(small-in-both-dimensions case) still passes.
+
+Full `tests/test_document_normalizer.py` run: 13 passed, plus 3
+pre-existing failures unrelated to this change (`test_office_source_*`,
+`test_office_conversion_failure_is_typed` — a Windows-only environment
+limitation: `subprocess.run` can't exec a `#!`-shebang script directly,
+confirmed present before this change too). `ruff check` and `ty check` on
+both changed files clean.

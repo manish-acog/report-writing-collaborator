@@ -216,6 +216,27 @@ def test_collect_assets_filters_undersized_images(tmp_path: Path) -> None:
     assert (assets_dir / "document-0001-01.png").is_file()
 
 
+def test_collect_assets_filters_wide_but_short_banner(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "sample.pdf"
+    _make_single_page_pdf(pdf_path, width=400, height=200)
+    normalizer = DocumentNormalizer(tmp_path / "staging")
+    source_id = "src_test"
+    assets_dir = normalizer._assets_dir(source_id)
+    assets_dir.mkdir(parents=True)
+    # Page is 400x200pt; at _IMAGE_DPI=150 that's ~833x417px, 10% ~= 83x42px.
+    # Banner: width 750px (90% of page width, clears 10%) but height 15px
+    # (under 10% of page height) -- missed by `and`, caught by `or`.
+    (assets_dir / "document-0001-00.png").write_bytes(_make_png_bytes(750, 15))
+    # Real content image: large in both dimensions, must still survive.
+    (assets_dir / "document-0001-01.png").write_bytes(_make_png_bytes(600, 300))
+
+    assets = normalizer._collect_assets(source_id, pdf_path)
+
+    assert [Path(asset.path).name for asset in assets] == ["document-0001-01.png"]
+    # The filtered banner file itself is untouched -- only the asset list excludes it.
+    assert (assets_dir / "document-0001-00.png").is_file()
+
+
 def test_collect_assets_rejects_unexpected_image_filename(tmp_path: Path) -> None:
     pdf_path = tmp_path / "sample.pdf"
     _make_single_page_pdf(pdf_path)
