@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -365,7 +365,7 @@ def test_write_report_injects_earlier_groups_values_into_later_instruction(
     real_build_instruction = report_orchestrator._build_instruction
     captured_instructions: list[str] = []
 
-    def _spy_build_instruction(*args: object, **kwargs: object) -> str:
+    def _spy_build_instruction(*args: Any, **kwargs: Any) -> str:
         instruction = real_build_instruction(*args, **kwargs)
         captured_instructions.append(instruction)
         return instruction
@@ -406,7 +406,7 @@ def test_write_report_uses_a_fresh_session_per_call_group(
     real_build_session = report_orchestrator._build_session
     session_ids: list[str] = []
 
-    def _spy_build_session(*args: object, **kwargs: object) -> tuple:
+    def _spy_build_session(*args: Any, **kwargs: Any) -> tuple:
         service, session_id = real_build_session(*args, **kwargs)
         session_ids.append(session_id)
         return service, session_id
@@ -439,7 +439,7 @@ def test_write_report_wires_requires_skills_into_bounded_agent(
     real_bounded = report_orchestrator._build_bounded_agent
     built_bounded_agents: list = []
 
-    def _spy_bounded(*args: object, **kwargs: object) -> object:
+    def _spy_bounded(*args: Any, **kwargs: Any) -> object:
         agent = real_bounded(*args, **kwargs)
         built_bounded_agents.append(agent)
         return agent
@@ -475,7 +475,7 @@ def test_write_report_defaults_to_no_extra_skills_when_unset(
     real_bounded = report_orchestrator._build_bounded_agent
     built_bounded_agents: list = []
 
-    def _spy_bounded(*args: object, **kwargs: object) -> object:
+    def _spy_bounded(*args: Any, **kwargs: Any) -> object:
         agent = real_bounded(*args, **kwargs)
         built_bounded_agents.append(agent)
         return agent
