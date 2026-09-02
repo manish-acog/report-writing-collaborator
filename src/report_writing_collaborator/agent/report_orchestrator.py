@@ -11,12 +11,16 @@ retry, fed the validation error as a new turn, before the run gives up on
 it. Every group's results are merged, persisted to values.json, and
 rendered against the skill's template. Everything the run produces -- the
 session transcript, provenance, values.json, a derived usage.json
-(token/tool-call counts), and the rendered report -- is
-version directory; workspace_root itself is never written to.
+(token/tool-call counts), and the rendered report -- is written to
+.tasks/<task_id>/, a sibling of workspace_root's numbered version
+directory; workspace_root itself is never written to.
 rerender_task() re-renders a prior run's values.json into a different
-template, with no model call. See docs/general_report_writing.md,
-docs/extraction_session_persistence.md, docs/citation_marker_retry.md,
-docs/task_run_artifacts.md, and docs/table_variable_type.md for the
+template, with no model call. Every runner.run_async() call is bounded by
+an HTTP request timeout and retry count (RunConfig.http_options), so a
+reset or stalled connection fails loud instead of hanging forever. See
+docs/general_report_writing.md, docs/extraction_session_persistence.md,
+docs/citation_marker_retry.md, docs/task_run_artifacts.md,
+docs/table_variable_type.md, and docs/model_call_reliability.md for the
 design.
 """
 
@@ -31,6 +35,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from google.adk.agents import LlmAgent
+from google.adk.agents.run_config import RunConfig
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
@@ -68,6 +73,18 @@ _USAGE_FILE_NAME = "usage.json"
 # Total attempts for one call_group's turn, including the first: one
 # corrective retry on a citation-marker validation failure before giving up.
 _VALIDATION_RETRY_LIMIT = 2
+# A reset or stalled connection has nothing bounding it without these --
+# the run hangs forever, silently (docs/model_call_reliability.md).
+# Generous on purpose: a real 61-field extraction turn, full workspace
+# context plus multiple tool calls, legitimately takes a while.
+_MODEL_CALL_TIMEOUT_MS = 300_000  # 5 minutes, per HTTP request.
+_MODEL_CALL_RETRY_ATTEMPTS = 3  # Includes the original request.
+_MODEL_CALL_RUN_CONFIG = RunConfig(
+    http_options=genai_types.HttpOptions(
+        timeout=_MODEL_CALL_TIMEOUT_MS,
+        retry_options=genai_types.HttpRetryOptions(attempts=_MODEL_CALL_RETRY_ATTEMPTS),
+    )
+)
 _EXTRACTION_PROMPT = "Extract the fields listed in your instructions from this workspace."
 _BOOTSTRAP_PROMPT = (
     "Load the `workspace-summary` skill and follow its structural pass to build "
@@ -391,7 +408,10 @@ async def _run_bounded_call_async(
         message = genai_types.Content(role="user", parts=[genai_types.Part(text=next_prompt)])
         try:
             async for _event in runner.run_async(
-                user_id=_RUNNER_USER_ID, session_id=session_id, new_message=message
+                user_id=_RUNNER_USER_ID,
+                session_id=session_id,
+                new_message=message,
+                run_config=_MODEL_CALL_RUN_CONFIG,
             ):
                 pass
         except ValidationError as error:

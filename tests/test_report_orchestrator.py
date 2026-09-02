@@ -528,7 +528,7 @@ def test_run_bounded_call_retries_once_on_validation_error_then_succeeds(
         def __init__(self, *, agent, app_name, session_service) -> None:
             self._session_service = session_service
 
-        async def run_async(self, *, user_id, session_id, new_message):
+        async def run_async(self, *, user_id, session_id, new_message, run_config=None):
             prompts.append(new_message.parts[0].text)
             if len(prompts) == 1:
                 raise validation_error
@@ -596,7 +596,7 @@ def test_run_bounded_call_raises_after_retries_exhausted(
         def __init__(self, *, agent, app_name, session_service) -> None:
             pass
 
-        async def run_async(self, *, user_id, session_id, new_message):
+        async def run_async(self, *, user_id, session_id, new_message, run_config=None):
             prompts.append(new_message.parts[0].text)
             raise validation_error
             yield
@@ -609,3 +609,53 @@ def test_run_bounded_call_raises_after_retries_exhausted(
         )
 
     assert len(prompts) == report_orchestrator._VALIDATION_RETRY_LIMIT
+
+
+def test_run_bounded_call_passes_bounded_http_timeout_and_retries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from google.adk.events.event import Event
+    from google.adk.events.event_actions import EventActions
+
+    skills_dir = tmp_path / "skills"
+    grounding_skill = load_skill_from_dir(
+        _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    )
+    config = load_variables_config(_make_report_skill(skills_dir) / "variables.json")
+    schema = build_output_schema(config.call_groups[0])
+    workspace = _make_workspace(tmp_path / "workspace")
+    agent = report_orchestrator._build_bounded_agent(
+        workspace, "anthropic/claude-sonnet-5", schema, "do the extraction", grounding_skill
+    )
+    session_service, session_id = report_orchestrator._build_session(workspace)
+    captured_run_configs: list[object] = []
+
+    class _FakeRunner:
+        def __init__(self, *, agent, app_name, session_service) -> None:
+            self._session_service = session_service
+
+        async def run_async(self, *, user_id, session_id, new_message, run_config=None):
+            captured_run_configs.append(run_config)
+            session = await self._session_service.get_session(
+                app_name=report_orchestrator._RUNNER_APP_NAME,
+                user_id=report_orchestrator._RUNNER_USER_ID,
+                session_id=session_id,
+            )
+            event = Event(
+                author="agent",
+                actions=EventActions(state_delta={report_orchestrator._OUTPUT_KEY: {"ok": True}}),
+            )
+            await self._session_service.append_event(session, event)
+            return
+            yield
+
+    monkeypatch.setattr(report_orchestrator, "Runner", _FakeRunner)
+
+    report_orchestrator._run_bounded_call(
+        agent, session_service, session_id, "Extract the fields."
+    )
+
+    assert len(captured_run_configs) == 1
+    http_options = captured_run_configs[0].http_options
+    assert http_options.timeout == report_orchestrator._MODEL_CALL_TIMEOUT_MS
+    assert http_options.retry_options.attempts == report_orchestrator._MODEL_CALL_RETRY_ATTEMPTS
