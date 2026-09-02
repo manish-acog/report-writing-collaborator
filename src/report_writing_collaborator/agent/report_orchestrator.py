@@ -87,10 +87,13 @@ _MODEL_CALL_RUN_CONFIG = RunConfig(
 )
 _EXTRACTION_PROMPT = "Extract the fields listed in your instructions from this workspace."
 _BOOTSTRAP_PROMPT = (
-    "Load the `workspace-summary` skill and follow its structural pass to build "
-    "a complete understanding of this workspace's source graph, roles, "
-    "hierarchy, assets, and images. The extraction calls that follow in this "
-    "same session build on this understanding, so be thorough."
+    "Load the `workspace-summary` skill, but build only an index this turn, "
+    "not a full read: the source tree (roles, hierarchy), and for every "
+    "source, its sections via `list_sections` -- title, heading path, and "
+    "page range per section. Do not read full section text and do not "
+    "inspect images in this pass; the extraction calls that follow in this "
+    "same session use `list_sections`/`read_section`/`grep_workspace` to "
+    "fetch exactly the evidence each one needs, when it needs it."
 )
 
 

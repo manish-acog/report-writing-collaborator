@@ -1,15 +1,19 @@
 """ADK wiring for the report-writing agent.
 
 Reads a published, read-only document workspace (built by
-report_writing_collaborator.WorkspaceBuilder) through four plain-function
-tools, guided by whatever skill(s) are registered. See
-agent_execution_over_adk.md and inspect_image.md for the design this
-implements.
+report_writing_collaborator.WorkspaceBuilder) through six plain-function
+tools, guided by whatever skill(s) are registered. list_sections/
+read_section give index-first, on-demand access to one source's sections
+without reading its whole normalized document; grep_workspace resolves
+section_id/source_pages on each match for the same reason. See
+agent_execution_over_adk.md, inspect_image.md, and
+docs/bootstrap_index_scaling.md for the design this implements.
 """
 
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
 from pathlib import Path
@@ -27,6 +31,9 @@ if TYPE_CHECKING:
 SKILLS_DIR = Path(__file__).parent / "skills"
 DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 _MAX_GREP_MATCHES = 200
+_NORMALIZED_DIR_NAME = "normalized"
+_NORMALIZED_DOC_NAME = "document.md"
+_SECTIONS_FILE_NAME = "document.sections.json"
 _VISION_MODEL_ENV_VAR = "REPORT_AGENT_VISION_MODEL"
 _VISION_TIMEOUT_SECONDS = 60
 _DEFAULT_IMAGE_QUESTION = "Describe this image, including any text, data, or diagrams it contains."
@@ -55,13 +62,21 @@ def _within_root(path: Path, root: Path) -> bool:
     return resolved == root or root in resolved.parents
 
 
+def _source_id_for_normalized_doc(relative_path: str) -> str | None:
+    """Extracts source_id from "normalized/<source_id>/document.md", else None."""
+    parts = relative_path.split("/")
+    if len(parts) == 3 and parts[0] == _NORMALIZED_DIR_NAME and parts[2] == _NORMALIZED_DOC_NAME:
+        return parts[1]
+    return None
+
+
 def make_workspace_tools(
     workspace_root: Path,
     agent_model: str = DEFAULT_MODEL,
 ) -> list[Callable[..., dict]]:
-    """Builds glob/grep/read/inspect tools bound to one read-only workspace.
+    """Builds glob/grep/read/inspect/list_sections/read_section tools for one workspace.
 
-    All four tools are confined to workspace_root: matches or reads that
+    All six tools are confined to workspace_root: matches or reads that
     would resolve outside it (e.g. via a ".." segment) are rejected or
     silently excluded rather than followed.
 
@@ -72,6 +87,31 @@ def make_workspace_tools(
     """
     workspace_root = workspace_root.resolve()
     vision_model = os.environ.get(_VISION_MODEL_ENV_VAR) or agent_model
+    sections_cache: dict[str, list[dict] | None] = {}
+
+    def _sections_for_source(source_id: str) -> list[dict] | None:
+        """Loads and caches one source's document.sections.json, by source_id."""
+        if source_id in sections_cache:
+            return sections_cache[source_id]
+
+        sections_path = workspace_root / _NORMALIZED_DIR_NAME / source_id / _SECTIONS_FILE_NAME
+        sections: list[dict] | None = None
+        if _within_root(sections_path, workspace_root) and sections_path.is_file():
+            try:
+                index = json.loads(sections_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                index = None
+            candidate = index.get("sections") if isinstance(index, dict) else None
+            sections = candidate if isinstance(candidate, list) else None
+
+        sections_cache[source_id] = sections
+        return sections
+
+    def _section_at_line(source_id: str, line_number: int) -> dict | None:
+        for section in _sections_for_source(source_id) or []:
+            if section["start_line"] <= line_number <= section["end_line"]:
+                return section
+        return None
 
     def glob_workspace(pattern: str) -> dict:
         """Lists workspace files matching a glob pattern.
@@ -101,9 +141,11 @@ def make_workspace_tools(
 
         Returns:
             A dict with "status" and "matches" (each a dict with "path",
-            "line_number", "line"), capped at 200 matches, plus
-            "truncated". On an invalid pattern, "status" is "error" and
-            "error_message" explains why.
+            "line_number", "line", "section_id", "source_pages" -- the
+            latter two are null when the match isn't inside a normalized
+            document with a section index, e.g. manifest.json), capped at
+            200 matches, plus "truncated". On an invalid pattern, "status"
+            is "error" and "error_message" explains why.
         """
         try:
             compiled = re.compile(pattern)
@@ -119,9 +161,17 @@ def make_workspace_tools(
             except (UnicodeDecodeError, OSError):
                 continue
             relative = path.relative_to(workspace_root).as_posix()
+            source_id = _source_id_for_normalized_doc(relative)
             for line_number, line in enumerate(text.splitlines(), start=1):
                 if compiled.search(line):
-                    matches.append({"path": relative, "line_number": line_number, "line": line})
+                    section = _section_at_line(source_id, line_number) if source_id else None
+                    matches.append({
+                        "path": relative,
+                        "line_number": line_number,
+                        "line": line,
+                        "section_id": section["section_id"] if section else None,
+                        "source_pages": section["source_pages"] if section else None,
+                    })
                     if len(matches) >= _MAX_GREP_MATCHES:
                         return {"status": "success", "matches": matches, "truncated": True}
 
@@ -150,6 +200,91 @@ def make_workspace_tools(
             return {"status": "error", "error_message": f"Cannot read {path}: {error}"}
 
         return {"status": "success", "content": content}
+
+    def list_sections(source_id: str) -> dict:
+        """Lists one source's sections as a table of contents, no body text.
+
+        Index-first access: enough per section to judge relevance -- title,
+        heading path, page range -- without paying for its full text.
+        Follow up with read_section for just the section(s) that matter.
+
+        Args:
+            source_id: A source's ID, from the workspace structure or a
+                citation.
+
+        Returns:
+            A dict with "status" and "sections" (each: "section_id",
+            "title", "heading_path", "source_pages"), or "status": "error"
+            and "error_message" if source_id has no section index.
+        """
+        sections = _sections_for_source(source_id)
+        if sections is None:
+            return {
+                "status": "error",
+                "error_message": f"No section index for source_id: {source_id}",
+            }
+
+        return {
+            "status": "success",
+            "sections": [
+                {
+                    "section_id": section["section_id"],
+                    "title": section["title"],
+                    "heading_path": section["heading_path"],
+                    "source_pages": section["source_pages"],
+                }
+                for section in sections
+            ],
+        }
+
+    def read_section(source_id: str, section_id: str) -> dict:
+        """Reads one section's text, sliced from its source's normalized document.
+
+        Args:
+            source_id: The section's source, from list_sections or a
+                citation.
+            section_id: One section's ID, from list_sections.
+
+        Returns:
+            A dict with "status", "title", "heading_path", "source_pages",
+            and "content" (just that section's text), or "status": "error"
+            and "error_message" if source_id or section_id isn't found.
+        """
+        sections = _sections_for_source(source_id)
+        if sections is None:
+            return {
+                "status": "error",
+                "error_message": f"No section index for source_id: {source_id}",
+            }
+
+        section = next((s for s in sections if s.get("section_id") == section_id), None)
+        if section is None:
+            return {
+                "status": "error",
+                "error_message": f"Unknown section_id '{section_id}' for source '{source_id}'",
+            }
+
+        document_path = workspace_root / _NORMALIZED_DIR_NAME / source_id / _NORMALIZED_DOC_NAME
+        if not _within_root(document_path, workspace_root) or not document_path.is_file():
+            return {
+                "status": "error",
+                "error_message": f"Cannot read normalized document for source: {source_id}",
+            }
+
+        try:
+            lines = document_path.read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, OSError) as error:
+            return {"status": "error", "error_message": f"Cannot read section content: {error}"}
+
+        content = "\n".join(lines[max(section["start_line"] - 1, 0) : section["end_line"]])
+
+        return {
+            "status": "success",
+            "title": section["title"],
+            "heading_path": section["heading_path"],
+            "source_pages": section["source_pages"],
+            "content": content,
+        }
 
     def inspect_image(path: str, question: str | None = None) -> dict:
         """Asks a vision-capable model about one workspace image asset.
@@ -213,7 +348,14 @@ def make_workspace_tools(
             "model": vision_model,
         }
 
-    return [glob_workspace, grep_workspace, read_workspace_file, inspect_image]
+    return [
+        glob_workspace,
+        grep_workspace,
+        read_workspace_file,
+        inspect_image,
+        list_sections,
+        read_section,
+    ]
 
 
 def build_agent(

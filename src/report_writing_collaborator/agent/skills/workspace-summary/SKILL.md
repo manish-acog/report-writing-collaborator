@@ -25,10 +25,14 @@ evidence.
    a sample chosen by count. For a narrow question, call it only on images the
    question actually turns on. No images among the sources simply means
    skipping this step — there's nothing to special-case.
-3. **Read the content.** For each source, read its normalized Markdown
-   (`normalized_path`) — the full document text, headed by `#`/`##`/...
-   section markers. Use `grep_workspace` to locate relevant content before
-   reading whole files when the source material spans many sources.
+3. **Read the content.** For a general summary, read each source's
+   normalized Markdown (`normalized_path`) in full — the complete document
+   text, headed by `#`/`##`/... section markers. For a narrow question,
+   call `list_sections` first to see a source's table of contents, then
+   `read_section` for just the section(s) the question turns on — or
+   `grep_workspace` to locate the right spot first when the answer's
+   location isn't obvious from titles alone. Avoid reading a whole
+   document when only a fraction of it is relevant.
 4. **Write the output.** For a general summary, open with the structural
    picture built in step 1 (source tree, roles, asset and image counts),
    then give per-source content, folding in what step 2 found about each
@@ -40,12 +44,13 @@ evidence.
 
 Every factual claim must cite the `source_id` it came from and, when the
 claim traces to a specific page, the page number(s). Page numbers for a
-section come from that source's `document.sections.json`
-(`source_pages` on the section covering the claim) — read that file via
-`read_workspace_file` when a citation needs a page number. An `inspect_image`
-result is evidence like any other: cite the image's path and its source_id.
-Don't state something the source text or an image doesn't support — say
-what's missing instead of guessing.
+section come from that source's section index — `list_sections`,
+`read_section`, and `grep_workspace` all already surface `source_pages`
+directly; read `document.sections.json` via `read_workspace_file` only if
+you need a field they don't already give you. An `inspect_image` result is
+evidence like any other: cite the image's path and its source_id. Don't
+state something the source text or an image doesn't support — say what's
+missing instead of guessing.
 
 ## Output shape
 

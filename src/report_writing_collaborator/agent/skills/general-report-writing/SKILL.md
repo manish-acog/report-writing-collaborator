@@ -11,9 +11,12 @@ call are listed at the end of your instructions.
 
 ## Steps
 
-1. This session already built a structural understanding of the workspace
-   via the `workspace-summary` skill before this call began — rely on that
-   context rather than re-deriving it.
+1. This session's first turn already indexed the workspace via
+   `workspace-summary` — source tree plus, per section, title, heading
+   path, and page range. Use that index to identify which sections this
+   call's fields need, then fetch exactly those via `list_sections`/
+   `read_section`, or `grep_workspace` for a narrow lookup — full section
+   text is not preloaded.
 2. Load the `evidence-grounding` skill and apply its status, citation,
    image-evidence, and writing-style rules to every field.
 3. Fill only the fields listed at the end of your instructions. Treat
