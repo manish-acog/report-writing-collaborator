@@ -92,6 +92,12 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _make_png_bytes(width: int, height: int, color: int = 0x336699) -> bytes:
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, width, height), False)
+    pixmap.clear_with(color)
+    return pixmap.tobytes("png")
+
+
 def _make_soffice(
     path: Path,
     template_pdf: Path,
@@ -162,20 +168,66 @@ def test_pdf_normalization_preserves_provenance(tmp_path: Path) -> None:
     assert result.warnings == ()
 
 
+def _make_single_page_pdf(path: Path, *, width: float = 200, height: float = 200) -> None:
+    document = pymupdf.open()
+    document.new_page(width=width, height=height)
+    document.save(path)
+    document.close()
+
+
 def test_collect_assets_dedupes_identical_content(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "sample.pdf"
+    _make_single_page_pdf(pdf_path)
     normalizer = DocumentNormalizer(tmp_path / "staging")
     source_id = "src_test"
     assets_dir = normalizer._assets_dir(source_id)
     assets_dir.mkdir(parents=True)
-    (assets_dir / "page-0001.png").write_bytes(b"\x89PNGduplicate")
-    (assets_dir / "page-0002.png").write_bytes(b"\x89PNGduplicate")
-    (assets_dir / "page-0003.png").write_bytes(b"\x89PNGdistinct")
+    duplicate = _make_png_bytes(60, 60)
+    distinct = _make_png_bytes(60, 60, color=0x992200)
+    (assets_dir / "document-0001-00.png").write_bytes(duplicate)
+    (assets_dir / "document-0001-01.png").write_bytes(duplicate)
+    (assets_dir / "document-0001-02.png").write_bytes(distinct)
 
-    assets = normalizer._collect_assets(source_id)
+    assets = normalizer._collect_assets(source_id, pdf_path)
 
-    assert [Path(asset.path).name for asset in assets] == ["page-0001.png", "page-0003.png"]
+    assert [Path(asset.path).name for asset in assets] == [
+        "document-0001-00.png",
+        "document-0001-02.png",
+    ]
     # Duplicate file itself is untouched -- only the returned asset list dedupes.
-    assert (assets_dir / "page-0002.png").is_file()
+    assert (assets_dir / "document-0001-01.png").is_file()
+
+
+def test_collect_assets_filters_undersized_images(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "sample.pdf"
+    _make_single_page_pdf(pdf_path, width=200, height=200)
+    normalizer = DocumentNormalizer(tmp_path / "staging")
+    source_id = "src_test"
+    assets_dir = normalizer._assets_dir(source_id)
+    assets_dir.mkdir(parents=True)
+    # Page is 200x200pt; at _IMAGE_DPI=150 that's ~417px/side, 10% ~= 42px.
+    (assets_dir / "document-0001-00.png").write_bytes(_make_png_bytes(200, 200))
+    (assets_dir / "document-0001-01.png").write_bytes(_make_png_bytes(10, 10))
+
+    assets = normalizer._collect_assets(source_id, pdf_path)
+
+    assert [Path(asset.path).name for asset in assets] == ["document-0001-00.png"]
+    # The filtered file itself is untouched -- only the returned asset list excludes it.
+    assert (assets_dir / "document-0001-01.png").is_file()
+
+
+def test_collect_assets_rejects_unexpected_image_filename(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "sample.pdf"
+    _make_single_page_pdf(pdf_path)
+    normalizer = DocumentNormalizer(tmp_path / "staging")
+    source_id = "src_test"
+    assets_dir = normalizer._assets_dir(source_id)
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "unexpected-name.png").write_bytes(_make_png_bytes(60, 60))
+
+    with pytest.raises(DocumentParseError, match="doesn't match expected pattern"):
+        normalizer._collect_assets(source_id, pdf_path)
+
 
 
 def test_named_destination_link_is_internal(tmp_path: Path) -> None:

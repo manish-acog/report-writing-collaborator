@@ -38,6 +38,21 @@ _HEADER_FOOTER_CLASSES = frozenset({"page-header", "page-footer"})
 _PDF_TYPES = frozenset({"pdf"})
 _OFFICE_TYPES = frozenset({"doc", "docx", "ppt", "pptx"})
 _SUPPORTED_TYPES = _PDF_TYPES | _OFFICE_TYPES
+# pymupdf4llm's own default, now explicit: the size filter below needs a
+# fixed, known value to convert a page's point size into pixels.
+_IMAGE_DPI = 150
+# Below this fraction of its page's width AND height (both, not either), an
+# extracted image is treated as decorative, not content
+# (docs/pdf_image_extraction_limits.md).
+_IMAGE_SIZE_RATIO = 0.10
+# document_layout.py's own extracted-image naming convention -- an internal
+# convention of a third-party library, not a public API: page 1-indexed.
+# The prefix is the opened Document's own .name when it has one (which it
+# always does here, opened from a real file path) -- not the filename=
+# kwarg passed to to_markdown(), confirmed by reading parse_document's own
+# `document.filename = mydoc.name if mydoc.name else filename`. Matched
+# prefix-agnostically: only the trailing -page-index.ext shape is stable.
+_IMAGE_FILENAME_PATTERN = re.compile(r"^.+-(\d{4})-\d{2}\.\w+$")
 
 
 def make_source_id(source_sha256: str) -> str:
@@ -167,7 +182,7 @@ class DocumentNormalizer:
             pdf_path, source_id
         )
         normalized_path = self._write_markdown(markdown, source_id)
-        assets = self._collect_assets(source_id)
+        assets = self._collect_assets(source_id, pdf_path)
 
         result = NormalizedDocument(
             source_id=source_id,
@@ -452,11 +467,13 @@ class DocumentNormalizer:
             page_chunks=True,
             filename="document",
             image_path=str(image_path),
-            # Library default is 0.05 (5% of page width/height) -- too low to
-            # filter a repeated letterhead/banner, which clears it easily.
-            # Explicit, deliberate threshold instead of an implicit dependency
-            # on pymupdf4llm's own default (docs/pdf_image_extraction_limits.md).
-            image_size_limit=0.10,
+            # image_size_limit is silently discarded under this environment's
+            # active layout engine -- not a supported kwarg there at all.
+            # Passing dpi explicitly instead: unused for filtering here, but
+            # the size filter in _collect_assets needs a fixed, known value
+            # matching what pymupdf4llm actually rendered images at
+            # (docs/pdf_image_extraction_limits.md).
+            dpi=_IMAGE_DPI,
             show_progress=False,
         )
         if not isinstance(raw_chunks, list):
@@ -479,24 +496,31 @@ class DocumentNormalizer:
 
         return normalized_path
 
-    def _collect_assets(self, source_id: str) -> tuple[Asset, ...]:
+    def _collect_assets(self, source_id: str, pdf_path: Path) -> tuple[Asset, ...]:
         # pymupdf4llm writes one file per occurrence, not per unique image --
-        # a logo repeated on every page produces one identical file per page.
-        # Every file stays on disk exactly as written; only the returned
-        # Asset list collapses to one entry per unique SHA-256, first
-        # occurrence in sorted-path order (docs/pdf_image_extraction_limits.md).
+        # a logo repeated on every page produces one identical file per page
+        # -- and, since image_size_limit is dead (see _parse_pdf), one file
+        # per decorative graphic too, however small. Every file stays on
+        # disk exactly as written -- deleting one could dangle document.md's
+        # own inline reference to it. Only the returned Asset list collapses:
+        # one entry per unique SHA-256 (first occurrence, sorted-path order),
+        # undersized images excluded entirely
+        # (docs/pdf_image_extraction_limits.md).
         assets_dir = self._assets_dir(source_id)
 
         assets: list[Asset] = []
         seen_hashes: set[str] = set()
-        for path in sorted(assets_dir.iterdir()):
-            if not path.is_file():
-                continue
-            sha256 = _sha256(path)
-            if sha256 in seen_hashes:
-                continue
-            seen_hashes.add(sha256)
-            assets.append(Asset(path=self._relative(path), sha256=sha256))
+        with pymupdf.open(pdf_path) as document:
+            for path in sorted(assets_dir.iterdir()):
+                if not path.is_file():
+                    continue
+                if _is_undersized_image(path, document):
+                    continue
+                sha256 = _sha256(path)
+                if sha256 in seen_hashes:
+                    continue
+                seen_hashes.add(sha256)
+                assets.append(Asset(path=self._relative(path), sha256=sha256))
 
         return tuple(assets)
 
@@ -712,3 +736,35 @@ def _sha256(path: Path) -> str:
         raise DocumentNormalizationError(f"Cannot hash file: {path}") from error
 
     return digest.hexdigest()
+
+
+def _is_undersized_image(path: Path, document: pymupdf.Document) -> bool:
+    """True if path is a pymupdf4llm-extracted image under _IMAGE_SIZE_RATIO of its page.
+
+    Applied post-write, not via any pymupdf4llm kwarg -- image_size_limit is
+    silently discarded under the active layout engine (see _parse_pdf).
+    Recovers which page a file belongs to from its filename, an internal
+    convention of a third-party library, not a public API -- a name that
+    doesn't match is a library-side convention change, not a file to
+    silently pass through unfiltered.
+    """
+    match = _IMAGE_FILENAME_PATTERN.match(path.name)
+    if match is None:
+        raise DocumentParseError(f"Extracted image name doesn't match expected pattern: {path.name}")
+
+    page_number = int(match.group(1))
+    if not 1 <= page_number <= document.page_count:
+        raise DocumentParseError(
+            f"Extracted image '{path.name}' references out-of-range page {page_number}"
+        )
+
+    page = document[page_number - 1]
+    scale = _IMAGE_DPI / 72
+    page_width = page.rect.width * scale
+    page_height = page.rect.height * scale
+
+    pixmap = pymupdf.Pixmap(str(path))
+    return (
+        pixmap.width < page_width * _IMAGE_SIZE_RATIO
+        and pixmap.height < page_height * _IMAGE_SIZE_RATIO
+    )

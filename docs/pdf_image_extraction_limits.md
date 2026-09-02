@@ -15,13 +15,20 @@ general-summary mode, unchanged by this doc — see Not Doing).
 Two independent contributors, both confirmed by reading the extraction
 code directly:
 
-1. **`image_size_limit` was never set, silently using the library
-   default.** `_parse_pdf`'s `pymupdf4llm.to_markdown(...)` call
-   (`document_normalizer.py:442-456`) doesn't pass `image_size_limit` —
-   `pymupdf4llm`'s own default is `0.05` (5% of page width/height). A
-   genuinely tiny icon gets filtered; a reasonably-sized letterhead or
-   banner clears 5% easily and passes through untouched, same as a real
-   figure would.
+1. **`image_size_limit` never reached the code that extracts images —
+   confirmed dead, not just unset.** `_parse_pdf`'s
+   `pymupdf4llm.to_markdown(...)` call dispatches to `_layout_to_markdown`
+   whenever `pymupdf.layout` is importable (`pymupdf4llm/__init__.py:50-56`
+   — *"Always attempt to use Layout by default"*), which it is in this
+   environment. `_layout_to_markdown`'s own kwarg list
+   (`__init__.py:59-87`) doesn't include `image_size_limit` at all — it
+   falls into a trailing `**kwargs` explicitly commented *"unsupported
+   options for pymupdf layout"* and is silently discarded.
+   `document_layout.parse_document`, the function actually doing the
+   extraction, writes every region the layout model classifies as
+   `"picture"`/`"formula"` (`document_layout.py:1551-1559`) with no size
+   check anywhere in that path. Passing `image_size_limit` at any value
+   changes nothing under the active layout engine.
 2. **No content-based deduplication anywhere in the extraction path.**
    `_collect_assets` (`document_normalizer.py:477-484`) enumerates every
    file `pymupdf4llm` wrote and hashes each for tracking, but never checks
@@ -31,9 +38,16 @@ code directly:
 
 ## Shape
 
-- **`_parse_pdf`** — passes `image_size_limit=0.10` explicitly, a
-  deliberate choice instead of an implicit dependency on the library's
-  own default.
+- **`_parse_pdf`** — passes `dpi` explicitly (previously left at the
+  library default) so the filter below has a known, fixed value to
+  compare against.
+- **New: a post-write size filter** — after `pymupdf4llm` writes a
+  page's images, read each written file's own pixel dimensions and
+  compare against that page's full-page-equivalent pixel size at the same
+  `dpi` (`page.rect.width/height * dpi/72`); drop files whose width and
+  height both fall under 10% of the corresponding page dimension. Applied
+  post-write, not via any `pymupdf4llm` kwarg — there isn't one that
+  works under the active layout engine.
 - **`_collect_assets`** — hashes every extracted image file; keeps only
   the first occurrence (by sorted path) of each unique SHA-256. Duplicate
   files stay on disk exactly as `pymupdf4llm` wrote them — nothing is
@@ -54,8 +68,9 @@ files are still written to `assets_dir` by `pymupdf4llm`, unchanged.
 sees one image, not fifty.
 
 **A genuinely small decorative icon (e.g. a 3%-of-page-width bullet
-graphic).** Filtered by the raised `image_size_limit`, same mechanism as
-before, just at a higher, deliberately-chosen bar.
+graphic).** Filtered by the post-write pixel-dimension check, comparing
+its written file's own size against the source page's — not by any
+`pymupdf4llm` kwarg, confirmed dead under the active layout engine.
 
 **Two visually similar but not byte-identical images** (e.g. two
 different photos of similar-looking tissue). Not deduplicated — this is
@@ -90,15 +105,26 @@ correctly.
   already sorts `embfile_names()`. The same PDF, run twice, keeps the same
   instance of a duplicated image both times.
 
-### `image_size_limit` raised to `0.10`, set explicitly
+### Superseded: `image_size_limit` kwarg does nothing under the active layout engine
 
-- **Options:** A — leave it unset (library default `0.05`). B (chosen) —
-  pass `image_size_limit=0.10` explicitly.
-- **Chose:** B.
-- **Consequences:** a visible, deliberate threshold instead of an implicit
-  dependency on `pymupdf4llm`'s own default that a reader of `_parse_pdf`
-  would otherwise have to go look up. Filters more decorative small
-  graphics before they ever reach the dedup step above.
+- **What changed:** the original decision here (pass `image_size_limit=0.10`
+  to `pymupdf4llm.to_markdown(...)`) was implemented, then confirmed dead —
+  `pymupdf.layout` is installed in this environment, `pymupdf4llm` prefers
+  it by default, and the layout code path never reads that kwarg at all
+  (see Why). The threshold was never actually applied; every image, of
+  every size, was written regardless.
+- **Replacement:** a post-write pixel-dimension filter — see Shape.
+  Compares each written file's own size against its source page's
+  full-page-equivalent size at a `dpi` we now pass explicitly, entirely
+  independent of `pymupdf4llm`'s kwargs.
+- **Consequences:** couples this code to `document_layout.py`'s filename
+  convention (`f"{filename}-{page:04d}-{index:02d}.{ext}"`) to recover
+  which page a written file belongs to — an internal convention of a
+  third-party library, not a public API, and a real fragility a future
+  `pymupdf4llm` upgrade could break silently. Mitigation: parse strictly
+  and raise (not silently skip filtering) if a filename doesn't match the
+  expected pattern, so a library-side naming change fails loud instead of
+  quietly disabling the filter.
 
 ## Not doing
 
@@ -120,16 +146,54 @@ None blocking.
 
 ## Implementation
 
-`_parse_pdf` passes `image_size_limit=0.10` explicitly to
-`pymupdf4llm.to_markdown(...)`. `_collect_assets` tracks seen SHA-256
-hashes while iterating `assets_dir` in its existing sorted-path order,
-skipping a path once its hash has already produced an `Asset` -- first
-occurrence wins, nothing on disk is touched. Regression test:
-`test_collect_assets_dedupes_identical_content` writes two
+**Dedup: implemented and confirmed correct.** `_collect_assets` tracks
+seen SHA-256 hashes while iterating `assets_dir` in its existing
+sorted-path order, skipping a path once its hash has already produced an
+`Asset` — first occurrence wins, nothing on disk is touched. Regression
+test: `test_collect_assets_dedupes_identical_content` writes two
 byte-identical files and one distinct file directly into a
 `DocumentNormalizer`'s `_assets_dir`, asserts `_collect_assets` returns
 one `Asset` per unique hash (first path wins) and that the skipped
-duplicate file is still on disk, untouched. The existing
-`test_pdf_normalization_preserves_provenance` fixture's embedded image
-(a 200x200-point image on an A4 page, well above 10% of page
-width/height) confirmed unaffected by the raised threshold.
+duplicate file is still on disk, untouched. Independently re-verified
+against a real multi-page document: a logo repeated across 7 pages,
+byte-identical, collapses to exactly 1 asset entry.
+
+**Size filter: implemented and confirmed correct.** `_parse_pdf` now
+passes `dpi=150` explicitly (`_IMAGE_DPI`, matching the library's own
+prior implicit default — not a behavior change to rendering, just a
+fixed value the filter below can compare against). `_collect_assets`
+opens the source PDF once and, for every file already moved into
+`assets_dir`, parses its page number from the filename and skips it
+(excludes it from the returned `Asset` list — same "never touch disk"
+principle as dedup, for the same reason: `pymupdf4llm`'s own Markdown
+already references every written file by path, and deleting one would
+dangle that reference) when both its own pixel width and height fall
+under 10% of its source page's full-page-equivalent pixel size at that
+dpi.
+
+One correction found while implementing: the filename convention's
+prefix is *not* the `filename=` kwarg passed to `to_markdown()` — traced
+to `parse_document`'s own `document.filename = mydoc.name if mydoc.name
+else filename`, so it's the opened `pymupdf.Document`'s own `.name`
+(the source PDF's path) whenever one is given, which is always, here.
+Confirmed empirically: `filename="document"` produced
+`original.pdf-0001-00.png`, not `document-0001-00.png`. The strict
+pattern match (`_IMAGE_FILENAME_PATTERN`) is written prefix-agnostic —
+it matches the stable trailing `-page-index.ext` shape regardless — so
+this doesn't weaken the "fail loud on a library-side naming change"
+mitigation; it just means the prefix was never an assumption worth
+encoding in the first place.
+
+Regression tests: `test_collect_assets_filters_undersized_images` (a
+200x200px image survives, a 10x10px one on the same 200x200pt page
+doesn't; the filtered file itself stays on disk),
+`test_collect_assets_rejects_unexpected_image_filename` (a non-matching
+name raises `DocumentParseError` rather than passing through
+unfiltered), and `test_collect_assets_dedupes_identical_content`
+rewritten to use realistic filenames and real, size-appropriate PNGs so
+it exercises both filters together. Independently re-verified against a
+real two-page PDF (a 400x400px content image, a 12x12px decorative
+graphic): both files land in `assets_dir`; only the large one appears in
+`result.assets`.
+
+Full preflight run: 141 passed, `ruff check .` and `ty check src` clean.
