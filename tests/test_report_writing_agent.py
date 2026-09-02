@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -208,10 +209,12 @@ def test_inspect_image_returns_description(tmp_path: Path, monkeypatch: pytest.M
     )
 
     with patch(
-        "report_writing_collaborator.agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.acompletion",
         return_value=_fake_response("A line chart trending upward."),
     ) as completion:
-        result = inspect_image("assets/src_a/images/pic.png", question="What trend is shown?")
+        result = asyncio.run(
+            inspect_image("assets/src_a/images/pic.png", question="What trend is shown?")
+        )
 
     assert result == {
         "status": "success",
@@ -228,10 +231,10 @@ def test_inspect_image_uses_default_question_when_omitted(tmp_path: Path) -> Non
     _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
 
     with patch(
-        "report_writing_collaborator.agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.acompletion",
         return_value=_fake_response("A generic description."),
     ) as completion:
-        inspect_image("assets/src_a/images/pic.png")
+        asyncio.run(inspect_image("assets/src_a/images/pic.png"))
 
     sent_text = completion.call_args.kwargs["messages"][0]["content"][0]["text"]
     assert "Describe this image" in sent_text
@@ -242,7 +245,7 @@ def test_inspect_image_rejects_path_traversal(tmp_path: Path) -> None:
     (tmp_path / "secret.png").write_bytes(b"\x89PNG")
     _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
 
-    result = inspect_image("../secret.png")
+    result = asyncio.run(inspect_image("../secret.png"))
 
     assert result["status"] == "error"
     assert "escapes workspace" in result["error_message"]
@@ -252,7 +255,7 @@ def test_inspect_image_reports_missing_file(tmp_path: Path) -> None:
     workspace = _make_workspace(tmp_path)
     _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
 
-    result = inspect_image("assets/src_a/images/does-not-exist.png")
+    result = asyncio.run(inspect_image("assets/src_a/images/does-not-exist.png"))
 
     assert result["status"] == "error"
     assert "Not a file" in result["error_message"]
@@ -263,7 +266,7 @@ def test_inspect_image_rejects_unsupported_format(tmp_path: Path) -> None:
     (workspace / "assets" / "src_a" / "images" / "scan.tiff").write_bytes(b"II*\x00")
     _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
 
-    result = inspect_image("assets/src_a/images/scan.tiff")
+    result = asyncio.run(inspect_image("assets/src_a/images/scan.tiff"))
 
     assert result["status"] == "error"
     assert "Unsupported image format" in result["error_message"]
@@ -274,10 +277,10 @@ def test_inspect_image_reports_model_call_failure(tmp_path: Path) -> None:
     _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
 
     with patch(
-        "report_writing_collaborator.agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.acompletion",
         side_effect=RuntimeError("timed out"),
     ):
-        result = inspect_image("assets/src_a/images/pic.png")
+        result = asyncio.run(inspect_image("assets/src_a/images/pic.png"))
 
     assert result["status"] == "error"
     assert "Vision model call failed" in result["error_message"]
@@ -293,13 +296,41 @@ def test_inspect_image_prefers_vision_model_env_override(
     )
 
     with patch(
-        "report_writing_collaborator.agent.agent.litellm.completion",
+        "report_writing_collaborator.agent.agent.litellm.acompletion",
         return_value=_fake_response("described"),
     ) as completion:
-        result = inspect_image("assets/src_a/images/pic.png")
+        result = asyncio.run(inspect_image("assets/src_a/images/pic.png"))
 
     assert result["model"] == "openai/gpt-4o"
     assert completion.call_args.kwargs["model"] == "openai/gpt-4o"
+
+
+def test_inspect_image_calls_overlap_concurrently(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    _, _, _, inspect_image, _, _ = make_workspace_tools(workspace)
+    call_count = 3
+    delay_seconds = 0.2
+
+    async def _slow_acompletion(**_kwargs: object) -> object:
+        await asyncio.sleep(delay_seconds)
+        return _fake_response("described")
+
+    async def _run_concurrently() -> float:
+        started = asyncio.get_event_loop().time()
+        await asyncio.gather(
+            *(inspect_image("assets/src_a/images/pic.png") for _ in range(call_count))
+        )
+        return asyncio.get_event_loop().time() - started
+
+    with patch(
+        "report_writing_collaborator.agent.agent.litellm.acompletion",
+        side_effect=_slow_acompletion,
+    ):
+        elapsed = asyncio.run(_run_concurrently())
+
+    # Serialized, call_count calls would take call_count * delay_seconds; if
+    # they actually overlap, the whole gather() takes roughly one delay.
+    assert elapsed < delay_seconds * call_count
 
 
 def test_build_agent_constructs_without_llm_call(tmp_path: Path) -> None:

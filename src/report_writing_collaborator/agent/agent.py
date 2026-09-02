@@ -26,7 +26,7 @@ from google.adk.skills import load_skill_from_dir
 from google.adk.tools.skill_toolset import SkillToolset
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 DEFAULT_MODEL = "anthropic/claude-sonnet-5"
@@ -73,12 +73,15 @@ def _source_id_for_normalized_doc(relative_path: str) -> str | None:
 def make_workspace_tools(
     workspace_root: Path,
     agent_model: str = DEFAULT_MODEL,
-) -> list[Callable[..., dict]]:
+) -> list[Callable[..., dict | Awaitable[dict]]]:
     """Builds glob/grep/read/inspect/list_sections/read_section tools for one workspace.
 
     All six tools are confined to workspace_root: matches or reads that
     would resolve outside it (e.g. via a ".." segment) are rejected or
-    silently excluded rather than followed.
+    silently excluded rather than followed. inspect_image is the only
+    async tool -- it awaits the vision model call so concurrent
+    inspect_image calls overlap instead of blocking the event loop in
+    series; ADK detects the coroutine automatically at call time.
 
     Args:
         workspace_root: The published workspace directory to read from.
@@ -286,7 +289,7 @@ def make_workspace_tools(
             "content": content,
         }
 
-    def inspect_image(path: str, question: str | None = None) -> dict:
+    async def inspect_image(path: str, question: str | None = None) -> dict:
         """Asks a vision-capable model about one workspace image asset.
 
         Args:
@@ -323,7 +326,7 @@ def make_workspace_tools(
             return {"status": "error", "error_message": f"Cannot read {path}: {error}"}
 
         try:
-            response = litellm.completion(
+            response = await litellm.acompletion(
                 model=vision_model,
                 timeout=_VISION_TIMEOUT_SECONDS,
                 messages=[
