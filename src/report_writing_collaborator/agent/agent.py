@@ -5,11 +5,13 @@ report_writing_collaborator.WorkspaceBuilder) through four plain-function
 tools, guided by whatever skill(s) are registered. grep_workspace gives
 matches surrounding context plus section_id/source_pages, resolved from
 the matched line; read_workspace_file's offset/limit widens a
-confirmed-relevant spot without a second tool. No bespoke
-fetch-by-structural-unit tool -- document.sections.json stays a plain,
-directly-readable artifact for the rare genuine structural-discovery
-need. See agent_execution_over_adk.md, inspect_image.md, and
-docs/workspace_search_tools.md for the design this implements.
+confirmed-relevant spot without a second tool, capped at _MAX_READ_LINES
+regardless of the value passed or omitted -- no unbounded "whole file"
+read. No bespoke fetch-by-structural-unit tool -- document.sections.json
+stays a plain, directly-readable artifact for the rare genuine
+structural-discovery need. See agent_execution_over_adk.md,
+inspect_image.md, docs/workspace_search_tools.md, and
+docs/per_group_session_isolation.md for the design this implements.
 """
 
 from __future__ import annotations
@@ -35,6 +37,13 @@ DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 _MAX_GREP_MATCHES = 200
 _DEFAULT_CONTEXT_LINES = 2
 _MAX_CONTEXT_LINES = 3
+# Bounds the worst case regardless of model behavior: seven parallel,
+# unbounded reads of large documents is what actually produced a hard
+# TPM rejection in production (docs/per_group_session_isolation.md).
+# Generous enough for a genuine multi-paragraph read; a document longer
+# than this needs a later offset, the same progressive-widening pattern
+# grep_workspace's own context_lines cap already established.
+_MAX_READ_LINES = 500
 _NORMALIZED_DIR_NAME = "normalized"
 _NORMALIZED_DOC_NAME = "document.md"
 _SECTIONS_FILE_NAME = "document.sections.json"
@@ -205,17 +214,19 @@ def make_workspace_tools(
         return {"status": "success", "matches": matches, "truncated": False}
 
     def read_workspace_file(path: str, offset: int | None = None, limit: int | None = None) -> dict:
-        """Reads the text content of one workspace file, in full or by line range.
+        """Reads one workspace file's text content, capped at _MAX_READ_LINES lines.
 
         Args:
             path: A workspace-relative file path, e.g. "manifest.json" or
                 "normalized/src_.../document.md".
-            offset: 1-indexed starting line. Omitted with limit also
-                omitted: the whole file, unchanged from a plain read.
-            limit: Number of lines to return from offset. Omitted: to the
-                end of the file. Widen progressively (a bigger limit, or
-                an earlier offset) against an already-known location
-                rather than re-searching.
+            offset: 1-indexed starting line. Defaults to the file's first
+                line.
+            limit: Number of lines to return from offset. Capped at
+                _MAX_READ_LINES regardless of the value passed, or of
+                omission -- there's no unbounded "whole file" read.
+                Widen progressively (a bigger limit up to the cap, or a
+                later offset) against an already-known location rather
+                than re-searching.
 
         Returns:
             A dict with "status" and "content", or "status": "error" and
@@ -232,11 +243,10 @@ def make_workspace_tools(
         except (UnicodeDecodeError, OSError) as error:
             return {"status": "error", "error_message": f"Cannot read {path}: {error}"}
 
-        if offset is not None or limit is not None:
-            lines = content.splitlines()
-            start = max((offset or 1) - 1, 0)
-            end = len(lines) if limit is None else start + limit
-            content = "\n".join(lines[start:end])
+        lines = content.splitlines()
+        start = max((offset or 1) - 1, 0)
+        capped_limit = min(limit, _MAX_READ_LINES) if limit is not None else _MAX_READ_LINES
+        content = "\n".join(lines[start : start + capped_limit])
 
         return {"status": "success", "content": content}
 

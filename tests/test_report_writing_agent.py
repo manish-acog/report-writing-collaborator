@@ -8,7 +8,11 @@ from unittest.mock import patch
 import pytest
 from google.adk.tools.skill_toolset import SkillToolset
 
-from report_writing_collaborator.agent.agent import build_agent, make_workspace_tools
+from report_writing_collaborator.agent.agent import (
+    _MAX_READ_LINES,
+    build_agent,
+    make_workspace_tools,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -212,6 +216,35 @@ def test_read_workspace_file_offset_beyond_eof_returns_empty(tmp_path: Path) -> 
 
     assert result["status"] == "success"
     assert result["content"] == ""
+
+
+def test_read_workspace_file_caps_lines_even_without_limit(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    line_count = _MAX_READ_LINES + 50
+    (workspace / "normalized" / "src_a" / "big.md").write_text(
+        "\n".join(f"line {i}" for i in range(line_count)), encoding="utf-8"
+    )
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
+
+    result = read_workspace_file("normalized/src_a/big.md")
+
+    assert result["status"] == "success"
+    assert result["content"].count("\n") + 1 == _MAX_READ_LINES
+    assert "line 0" in result["content"]
+    assert f"line {_MAX_READ_LINES}" not in result["content"]
+
+
+def test_read_workspace_file_caps_limit_above_max(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    line_count = _MAX_READ_LINES + 50
+    (workspace / "normalized" / "src_a" / "big.md").write_text(
+        "\n".join(f"line {i}" for i in range(line_count)), encoding="utf-8"
+    )
+    _, _, read_workspace_file, _ = make_workspace_tools(workspace)
+
+    result = read_workspace_file("normalized/src_a/big.md", offset=1, limit=100_000)
+
+    assert result["content"].count("\n") + 1 == _MAX_READ_LINES
 
 
 def _fake_response(text: str) -> object:

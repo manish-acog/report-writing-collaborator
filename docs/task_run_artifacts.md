@@ -177,6 +177,14 @@ and counts events whose content carries a `function_call` part
 already in `task.json`, not worth the extra plumbing for a field the
 reader can get one file over.
 
+> **Superseded:** `_summarize_usage` summed one `session_id` because one
+> `write_report()` run held one shared session
+> (`docs/extraction_session_persistence.md`). `docs/per_group_session_isolation.md`
+> replaces that with one session per `call_group` — `_summarize_usage` now
+> sums across every session row for the task, not a single `session_id`.
+> `usage.json`'s own shape (model, call counts, token totals) is unchanged,
+> only how it's computed.
+
 **Deviates from this doc's own "Next" wording.** It said fetch the
 session *after* `session_service.close()`. Confirmed empirically instead:
 a `get_session()` call issued after `close()` opens a fresh pooled

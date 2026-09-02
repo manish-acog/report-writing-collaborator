@@ -71,6 +71,44 @@ def _make_report_skill(skills_dir: Path, requires_skills: list[str] | None = Non
     return skill_dir
 
 
+def _make_multi_group_report_skill(skills_dir: Path) -> Path:
+    """Two call_groups (g1: title, g2: conclusion) -- for cross-group tests."""
+    skill_dir = _make_skill_dir(
+        skills_dir, "multi-group-report", "Writes a report.", "Extract fields."
+    )
+    (skill_dir / "variables.json").write_text(
+        json.dumps(
+            {
+                "call_groups": [
+                    {
+                        "name": "g1",
+                        "variables": [
+                            {"name": "title", "variable_type": "text", "description": "Title."}
+                        ],
+                    },
+                    {
+                        "name": "g2",
+                        "variables": [
+                            {
+                                "name": "conclusion",
+                                "variable_type": "text",
+                                "description": "Conclusion.",
+                            }
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    templates_dir = skill_dir / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "report.md").write_text(
+        "# {{title}}\n\n{{conclusion}}\n\n{{references}}\n", encoding="utf-8"
+    )
+    return skill_dir
+
+
 def _make_workspace(root: Path) -> Path:
     (root / "normalized" / "src_a").mkdir(parents=True)
     (root / "sources" / "src_a").mkdir(parents=True)
@@ -133,40 +171,41 @@ def test_build_bounded_agent_has_schema_and_grounding_skill(tmp_path: Path) -> N
     assert [skill.frontmatter.name for skill in skill_toolset.skills] == ["evidence-grounding"]
 
 
-def test_build_bootstrap_agent_has_no_schema_and_structure_skill(tmp_path: Path) -> None:
-    workspace = _make_workspace(tmp_path / "workspace")
-    skills_dir = tmp_path / "skills"
-    structure_skill = load_skill_from_dir(
-        _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
-    )
-
-    agent = report_orchestrator._build_bootstrap_agent(
-        workspace, "anthropic/claude-sonnet-5", structure_skill
-    )
-
-    assert agent.output_schema is None
-    tool_names = {getattr(tool, "__name__", type(tool).__name__) for tool in agent.tools}
-    assert tool_names == {
-        "glob_workspace",
-        "grep_workspace",
-        "read_workspace_file",
-        "inspect_image",
-        "SkillToolset",
-    }
-    skill_toolset = next(tool for tool in agent.tools if isinstance(tool, SkillToolset))
-    assert [skill.frontmatter.name for skill in skill_toolset.skills] == ["workspace-summary"]
-
-
-def test_build_instruction_combines_skill_body_and_field_list(tmp_path: Path) -> None:
+def test_build_instruction_combines_skill_body_field_list_tree_and_prior_values(
+    tmp_path: Path,
+) -> None:
     skills_dir = tmp_path / "skills"
     skill = load_skill_from_dir(_make_report_skill(skills_dir))
     config = load_variables_config(skills_dir / "general-report-writing" / "variables.json")
 
-    instruction = report_orchestrator._build_instruction(skill, config.call_groups[0])
+    instruction = report_orchestrator._build_instruction(
+        skill, config.call_groups[0], "- src_a (protocol): Protocol.pdf", {}
+    )
 
     assert "Build structure first" in instruction
+    assert "## Source tree" in instruction
+    assert "- src_a (protocol): Protocol.pdf" in instruction
+    assert "Already extracted" not in instruction
     assert "**title**: Title." in instruction
     assert "**conclusion**: Conclusion." in instruction
+
+
+def test_build_instruction_includes_prior_found_values_not_not_found(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill = load_skill_from_dir(_make_report_skill(skills_dir))
+    config = load_variables_config(skills_dir / "general-report-writing" / "variables.json")
+    prior_values = {
+        "title": {"status": "found", "value": "My Report", "citations": []},
+        "abstract": {"status": "not_found"},
+    }
+
+    instruction = report_orchestrator._build_instruction(
+        skill, config.call_groups[0], "- src_a: Protocol.pdf", prior_values
+    )
+
+    assert "## Already extracted" in instruction
+    assert "**title**: My Report" in instruction
+    assert "abstract" not in instruction.split("## Already extracted")[1].split("## Fields")[0]
 
 
 def test_general_report_skill_loads_shared_grounding_rules() -> None:
@@ -186,7 +225,7 @@ def test_academic_report_skill_loads_shared_skills_and_imrad_fields() -> None:
         report_orchestrator.SKILLS_DIR / "academic-report" / "variables.json"
     )
 
-    assert "`workspace-summary`" in academic_skill.instructions
+    assert "Source tree" in academic_skill.instructions
     assert "`evidence-grounding`" in academic_skill.instructions
     assert "results" in academic_skill.instructions.lower()
     assert "discussion" in academic_skill.instructions.lower()
@@ -208,7 +247,6 @@ def test_write_report_merges_call_groups_and_renders(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "skills"
-    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
     _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
     _make_report_skill(skills_dir)
     workspace = _make_workspace(tmp_path / "workspace")
@@ -228,7 +266,7 @@ def test_write_report_merges_call_groups_and_renders(
     ) as run_call:
         result = report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
 
-    assert run_call.call_count == 2
+    assert run_call.call_count == 1
     assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result.text
     assert "Not addressed in the available evidence." in result.text
     assert "[Protocol.pdf](sources/src_a/original.pdf#page=1) (protocol), page 1" in result.text
@@ -273,45 +311,12 @@ def test_write_report_persists_partial_values_before_a_later_group_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "skills"
-    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
     _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
-    skill_dir = _make_skill_dir(
-        skills_dir, "multi-group-report", "Writes a report.", "Extract fields."
-    )
-    (skill_dir / "variables.json").write_text(
-        json.dumps(
-            {
-                "call_groups": [
-                    {
-                        "name": "g1",
-                        "variables": [
-                            {"name": "title", "variable_type": "text", "description": "Title."}
-                        ],
-                    },
-                    {
-                        "name": "g2",
-                        "variables": [
-                            {
-                                "name": "conclusion",
-                                "variable_type": "text",
-                                "description": "Conclusion.",
-                            }
-                        ],
-                    },
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    (skill_dir / "templates").mkdir()
-    (skill_dir / "templates" / "report.md").write_text(
-        "# {{title}}\n\n{{conclusion}}\n\n{{references}}\n", encoding="utf-8"
-    )
+    _make_multi_group_report_skill(skills_dir)
     workspace = _make_workspace(tmp_path / "workspace")
     monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
 
     responses: list[dict | Exception] = [
-        {},  # bootstrap turn (expect_output=False; return value is discarded)
         {
             "title": {
                 "status": "found",
@@ -348,26 +353,91 @@ def test_write_report_persists_partial_values_before_a_later_group_fails(
     }
 
 
-def test_write_report_wires_requires_skills_into_bootstrap_and_bounded_agents(
+def test_write_report_injects_earlier_groups_values_into_later_instruction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "skills"
-    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    _make_multi_group_report_skill(skills_dir)
+    workspace = _make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
+
+    real_build_instruction = report_orchestrator._build_instruction
+    captured_instructions: list[str] = []
+
+    def _spy_build_instruction(*args: object, **kwargs: object) -> str:
+        instruction = real_build_instruction(*args, **kwargs)
+        captured_instructions.append(instruction)
+        return instruction
+
+    responses = [
+        {"title": {"status": "found", "value": "My Report", "citations": []}},
+        {"conclusion": {"status": "found", "value": "The end.", "citations": []}},
+    ]
+
+    def fake_run_bounded_call(*args: object, **kwargs: object) -> dict:
+        return responses.pop(0)
+
+    with (
+        patch.object(
+            report_orchestrator, "_build_instruction", side_effect=_spy_build_instruction
+        ),
+        patch.object(report_orchestrator, "_run_bounded_call", side_effect=fake_run_bounded_call),
+    ):
+        report_orchestrator.write_report(workspace, skill_name="multi-group-report")
+
+    assert len(captured_instructions) == 2
+    # g1 (title) has no prior groups yet -- nothing to inject.
+    assert "Already extracted" not in captured_instructions[0]
+    # g2 (conclusion) sees g1's own extracted value verbatim, not the raw
+    # session history that produced it.
+    assert "**title**: My Report" in captured_instructions[1]
+
+
+def test_write_report_uses_a_fresh_session_per_call_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
+    _make_multi_group_report_skill(skills_dir)
+    workspace = _make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
+
+    real_build_session = report_orchestrator._build_session
+    session_ids: list[str] = []
+
+    def _spy_build_session(*args: object, **kwargs: object) -> tuple:
+        service, session_id = real_build_session(*args, **kwargs)
+        session_ids.append(session_id)
+        return service, session_id
+
+    with (
+        patch.object(report_orchestrator, "_build_session", side_effect=_spy_build_session),
+        patch.object(
+            report_orchestrator,
+            "_run_bounded_call",
+            return_value={"title": {"status": "not_found"}, "conclusion": {"status": "not_found"}},
+        ),
+    ):
+        report_orchestrator.write_report(workspace, skill_name="multi-group-report")
+
+    # One call_group, one fresh session each -- no session shared across groups.
+    assert len(session_ids) == 2
+    assert len(set(session_ids)) == 2
+
+
+def test_write_report_wires_requires_skills_into_bounded_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
     _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
     _make_skill_dir(skills_dir, "domain-understanding", "Reads a source.", "Read carefully.")
     _make_report_skill(skills_dir, requires_skills=["domain-understanding"])
     workspace = _make_workspace(tmp_path / "workspace")
     monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
 
-    real_bootstrap = report_orchestrator._build_bootstrap_agent
     real_bounded = report_orchestrator._build_bounded_agent
-    built_bootstrap_agents: list = []
     built_bounded_agents: list = []
-
-    def _spy_bootstrap(*args: object, **kwargs: object) -> object:
-        agent = real_bootstrap(*args, **kwargs)
-        built_bootstrap_agents.append(agent)
-        return agent
 
     def _spy_bounded(*args: object, **kwargs: object) -> object:
         agent = real_bounded(*args, **kwargs)
@@ -375,7 +445,6 @@ def test_write_report_wires_requires_skills_into_bootstrap_and_bounded_agents(
         return agent
 
     with (
-        patch.object(report_orchestrator, "_build_bootstrap_agent", side_effect=_spy_bootstrap),
         patch.object(report_orchestrator, "_build_bounded_agent", side_effect=_spy_bounded),
         patch.object(
             report_orchestrator,
@@ -385,16 +454,9 @@ def test_write_report_wires_requires_skills_into_bootstrap_and_bounded_agents(
     ):
         report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
 
-    bootstrap_toolset = next(
-        tool for tool in built_bootstrap_agents[0].tools if isinstance(tool, SkillToolset)
-    )
     bounded_toolset = next(
         tool for tool in built_bounded_agents[0].tools if isinstance(tool, SkillToolset)
     )
-    assert [skill.frontmatter.name for skill in bootstrap_toolset.skills] == [
-        "workspace-summary",
-        "domain-understanding",
-    ]
     assert [skill.frontmatter.name for skill in bounded_toolset.skills] == [
         "evidence-grounding",
         "domain-understanding",
@@ -405,21 +467,13 @@ def test_write_report_defaults_to_no_extra_skills_when_unset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "skills"
-    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
     _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
     _make_report_skill(skills_dir)
     workspace = _make_workspace(tmp_path / "workspace")
     monkeypatch.setattr(report_orchestrator, "SKILLS_DIR", skills_dir)
 
-    real_bootstrap = report_orchestrator._build_bootstrap_agent
     real_bounded = report_orchestrator._build_bounded_agent
-    built_bootstrap_agents: list = []
     built_bounded_agents: list = []
-
-    def _spy_bootstrap(*args: object, **kwargs: object) -> object:
-        agent = real_bootstrap(*args, **kwargs)
-        built_bootstrap_agents.append(agent)
-        return agent
 
     def _spy_bounded(*args: object, **kwargs: object) -> object:
         agent = real_bounded(*args, **kwargs)
@@ -427,7 +481,6 @@ def test_write_report_defaults_to_no_extra_skills_when_unset(
         return agent
 
     with (
-        patch.object(report_orchestrator, "_build_bootstrap_agent", side_effect=_spy_bootstrap),
         patch.object(report_orchestrator, "_build_bounded_agent", side_effect=_spy_bounded),
         patch.object(
             report_orchestrator,
@@ -437,13 +490,9 @@ def test_write_report_defaults_to_no_extra_skills_when_unset(
     ):
         report_orchestrator.write_report(workspace, model="anthropic/claude-sonnet-5")
 
-    bootstrap_toolset = next(
-        tool for tool in built_bootstrap_agents[0].tools if isinstance(tool, SkillToolset)
-    )
     bounded_toolset = next(
         tool for tool in built_bounded_agents[0].tools if isinstance(tool, SkillToolset)
     )
-    assert [skill.frontmatter.name for skill in bootstrap_toolset.skills] == ["workspace-summary"]
     assert [skill.frontmatter.name for skill in bounded_toolset.skills] == ["evidence-grounding"]
 
 
@@ -499,7 +548,7 @@ def test_summarize_usage_sums_tokens_and_counts_tool_calls(tmp_path: Path) -> No
 
     asyncio.run(_append_events())
 
-    usage = asyncio.run(report_orchestrator._summarize_usage(session_service, session_id))
+    usage = asyncio.run(report_orchestrator._summarize_usage(session_service))
     asyncio.run(session_service.close())
 
     assert usage == {
@@ -511,11 +560,53 @@ def test_summarize_usage_sums_tokens_and_counts_tool_calls(tmp_path: Path) -> No
         "total_tokens": 43,
     }
 
+
+def test_summarize_usage_sums_across_every_session_row_for_the_task(tmp_path: Path) -> None:
+    """Each call_group runs in its own session -- usage must sum across all of them, not one."""
+    from google.adk.events.event import Event
+    from google.genai import types as genai_types
+
+    workspace = _make_workspace(tmp_path / "workspace")
+    session_service, session_id_a = report_orchestrator._build_session(workspace)
+    # Second call_group's own isolated session, same sessions.db file.
+    session_id_b = asyncio.run(
+        session_service.create_session(
+            app_name=report_orchestrator._RUNNER_APP_NAME, user_id=report_orchestrator._RUNNER_USER_ID
+        )
+    ).id
+
+    async def _append_event(session_id: str, prompt_tokens: int) -> None:
+        session = await session_service.get_session(
+            app_name=report_orchestrator._RUNNER_APP_NAME,
+            user_id=report_orchestrator._RUNNER_USER_ID,
+            session_id=session_id,
+        )
+        event = Event(
+            author="agent",
+            content=genai_types.Content(role="model", parts=[genai_types.Part(text="hi")]),
+            usage_metadata=genai_types.GenerateContentResponseUsageMetadata(
+                prompt_token_count=prompt_tokens,
+                candidates_token_count=1,
+                cached_content_token_count=0,
+                total_token_count=prompt_tokens + 1,
+            ),
+        )
+        await session_service.append_event(session, event)
+
+    asyncio.run(_append_event(session_id_a, 10))
+    asyncio.run(_append_event(session_id_b, 100))
+
+    usage = asyncio.run(report_orchestrator._summarize_usage(session_service))
+    asyncio.run(session_service.close())
+
+    assert usage["event_count"] == 2
+    assert usage["prompt_tokens"] == 110
+
+
 def test_rerender_task_reproduces_or_reformats_without_a_model_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "skills"
-    _make_skill_dir(skills_dir, "workspace-summary", "Summarizes.", "Build structure.")
     _make_skill_dir(skills_dir, "evidence-grounding", "Cites.", "Ground every claim.")
     skill_dir = _make_report_skill(skills_dir)
     (skill_dir / "templates" / "report.html").write_text(

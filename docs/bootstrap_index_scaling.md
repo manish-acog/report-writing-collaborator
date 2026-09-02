@@ -38,6 +38,14 @@ complementary fixes for the same live incident, not competing ones.
 > `offset`/`limit`. Kept here for history; the reasoning for shrinking
 > bootstrap's payload in the first place is unchanged.
 
+> **Superseded further:** the bootstrap turn itself — not just its
+> payload — is eliminated by `docs/per_group_session_isolation.md`. The
+> source tree it produced here turned out to be pure data transformation
+> over already-structured `manifest.json`, computed by a plain function,
+> no model call at all. Kept here for history; the reasoning for why the
+> old bootstrap turn's payload needed shrinking (before it was removed
+> entirely) is unchanged.
+
 ## Shape
 
 - **`make_workspace_tools`** (`agent.py`) — gains two tools, over data

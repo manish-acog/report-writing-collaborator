@@ -1,27 +1,30 @@
 """Drives a report-writing skill's bounded extraction calls and renders the result.
 
-Runs one shared, database-backed ADK session per write_report() call: a
-bootstrap turn (workspace-summary only) builds structural understanding
-once, then one bounded LlmAgent turn per call_group (evidence-grounding
-plus workspace tools, constrained to that group's schema) extracts fields
-against the same session, so later turns build on earlier ones instead of
-re-discovering the workspace. A call_group whose output fails schema
-validation (e.g. an out-of-range [[cite:N]] marker) gets one corrective
-retry, fed the validation error as a new turn, before the run gives up on
-it. Every group's results are merged, persisted to values.json, and
-rendered against the skill's template. Everything the run produces -- the
-session transcript, provenance, values.json, a derived usage.json
-(token/tool-call counts), and the rendered report -- is written to
-.tasks/<task_id>/, a sibling of workspace_root's numbered version
-directory; workspace_root itself is never written to.
+Each call_group runs one bounded LlmAgent turn (evidence-grounding plus
+workspace tools, constrained to that group's schema) in its own isolated,
+database-backed ADK session -- no shared session, no bootstrap turn. Every
+instruction gets a static source tree (rendered directly from
+manifest.json, no model call) plus, once earlier groups have completed,
+their extracted values as plain text -- coherence without replaying raw
+session history. A call_group whose output fails schema validation (e.g.
+an out-of-range [[cite:N]] marker) gets one corrective retry, fed the
+validation error as a new turn, before the run gives up on it. Every
+group's results are merged, persisted to values.json, and rendered
+against the skill's template. Everything the run produces -- one
+sessions.db row per call_group, provenance, values.json, a derived
+usage.json (token/tool-call counts summed across every group's session),
+and the rendered report -- is written to .tasks/<task_id>/, a sibling of
+workspace_root's numbered version directory; workspace_root itself is
+never written to.
 rerender_task() re-renders a prior run's values.json into a different
 template, with no model call. Every runner.run_async() call is bounded by
 an HTTP request timeout and retry count (RunConfig.http_options), so a
 reset or stalled connection fails loud instead of hanging forever. See
 docs/general_report_writing.md, docs/extraction_session_persistence.md,
 docs/citation_marker_retry.md, docs/task_run_artifacts.md,
-docs/table_variable_type.md, docs/model_call_reliability.md, and
-docs/workspace_search_tools.md for the design.
+docs/table_variable_type.md, docs/model_call_reliability.md,
+docs/workspace_search_tools.md, and docs/per_group_session_isolation.md
+for the design.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import asyncio
 import json
 import os
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -60,9 +64,9 @@ if TYPE_CHECKING:
 _DEFAULT_TEMPLATE_NAME = "report.md"
 _VARIABLES_FILE_NAME = "variables.json"
 _TEMPLATES_DIR_NAME = "templates"
-_STRUCTURE_SKILL_NAME = "workspace-summary"
 _GROUNDING_SKILL_NAME = "evidence-grounding"
 _REQUIRES_SKILLS_KEY = "requires_skills"
+_MANIFEST_FILE_NAME = "manifest.json"
 _EXTRACTOR_AGENT_NAME = "report_field_extractor"
 _OUTPUT_KEY = "result"
 _RUNNER_APP_NAME = "report_orchestrator"
@@ -88,16 +92,6 @@ _MODEL_CALL_RUN_CONFIG = RunConfig(
     )
 )
 _EXTRACTION_PROMPT = "Extract the fields listed in your instructions from this workspace."
-_BOOTSTRAP_PROMPT = (
-    "Load the `workspace-summary` skill, but build only the source tree this "
-    "turn, not a full read: sources, their roles, and their hierarchy from "
-    "`manifest.json`. Do not enumerate any source's sections, read full "
-    "document text, or inspect images in this pass; the extraction calls "
-    "that follow in this same session grep and read on demand -- "
-    "`grep_workspace` (with surrounding context) and `read_workspace_file` "
-    "(with offset/limit against a confirmed-relevant spot) fetch exactly "
-    "the evidence each one needs, when it needs it."
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,10 +110,12 @@ def write_report(
     template_name: str = _DEFAULT_TEMPLATE_NAME,
     model: str | None = None,
 ) -> WriteReportResult:
-    """Runs a bootstrap turn, one bounded extraction call per call_group, and renders.
+    """Runs one bounded extraction call per call_group, each in its own isolated session, and renders.
 
-    Every turn runs against one shared, database-backed session
-    (<task_dir>/sessions.db) so later turns see earlier ones' context.
+    No shared session, no bootstrap turn: each call_group's instruction is
+    handed a static source tree (rendered from manifest.json, no model
+    call) plus every already-completed group's extracted values as plain
+    text, instead of a session carrying that context forward.
 
     Args:
         workspace_root: The published workspace directory to read from.
@@ -140,26 +136,21 @@ def write_report(
 
     skill_dir = SKILLS_DIR / skill_name
     skill = load_skill_from_dir(skill_dir)
-    structure_skill = load_skill_from_dir(SKILLS_DIR / _STRUCTURE_SKILL_NAME)
     grounding_skill = load_skill_from_dir(SKILLS_DIR / _GROUNDING_SKILL_NAME)
     extra_skill_names = skill.frontmatter.metadata.get(_REQUIRES_SKILLS_KEY, [])
     extra_skills = [load_skill_from_dir(SKILLS_DIR / name) for name in extra_skill_names]
     config = load_variables_config(skill_dir / _VARIABLES_FILE_NAME)
 
-    session_service, session_id = _build_session(task_dir)
-
-    bootstrap_agent = _build_bootstrap_agent(workspace_root, model, structure_skill, extra_skills)
-    _run_bounded_call(
-        bootstrap_agent, session_service, session_id, _BOOTSTRAP_PROMPT, expect_output=False
-    )
+    source_tree = _render_source_tree(workspace_root / _MANIFEST_FILE_NAME)
 
     values: dict[str, dict] = {}
     for call_group in config.call_groups:
         schema = build_output_schema(call_group)
-        instruction = _build_instruction(skill, call_group)
+        instruction = _build_instruction(skill, call_group, source_tree, values)
         agent = _build_bounded_agent(
             workspace_root, model, schema, instruction, grounding_skill, extra_skills
         )
+        session_service, session_id = _build_session(task_dir)
         values.update(_run_bounded_call(agent, session_service, session_id, _EXTRACTION_PROMPT))
         # Overwritten after every turn, not only at the end: a later
         # call_group failing after retries exhaust still leaves everything
@@ -167,13 +158,14 @@ def write_report(
         (task_dir / _VALUES_FILE_NAME).write_text(
             json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        asyncio.run(session_service.close())
 
-    usage = asyncio.run(_summarize_usage(session_service, session_id))
+    usage_service = _open_session_service(task_dir)
+    usage = asyncio.run(_summarize_usage(usage_service))
+    asyncio.run(usage_service.close())
     (task_dir / _USAGE_FILE_NAME).write_text(
         json.dumps(usage, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-
-    asyncio.run(session_service.close())
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
     text = render(template_path, values, workspace_root)
@@ -238,39 +230,46 @@ def rerender_task(
     )
 
 
-async def _summarize_usage(session_service: BaseSessionService, session_id: str) -> dict:
-    """Sums token and tool-call counts across a session's own event history.
+async def _summarize_usage(session_service: BaseSessionService) -> dict:
+    """Sums token and tool-call counts across every session row for this task.
 
-    Fetched before session_service.close(), not after: a get_session()
-    call issued after close() opens a fresh pooled connection whose
-    aiosqlite worker thread the closed engine never reclaims, leaving the
-    interpreter alive ~20s past a clean run's own exit -- confirmed
-    empirically by timing a same-process reopen against a throwaway
-    SQLite file. Not a trace, not raw events -- see
+    Each call_group runs in its own isolated session
+    (docs/per_group_session_isolation.md); this sums across every one of
+    them, not a single session_id. Fetched before session_service.close(),
+    not after: a get_session() call issued after close() opens a fresh
+    pooled connection whose aiosqlite worker thread the closed engine
+    never reclaims, leaving the interpreter alive ~20s past a clean run's
+    own exit -- confirmed empirically by timing a same-process reopen
+    against a throwaway SQLite file. Not a trace, not raw events -- see
     docs/task_run_artifacts.md.
     """
-    session = await session_service.get_session(
-        app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID, session_id=session_id
+    listing = await session_service.list_sessions(
+        app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID
     )
-    events = session.events if session is not None else []
 
     prompt_tokens = 0
     completion_tokens = 0
     cached_tokens = 0
     total_tokens = 0
     tool_calls = 0
-    for event in events:
-        usage = event.usage_metadata
-        if usage is not None:
-            prompt_tokens += usage.prompt_token_count or 0
-            completion_tokens += usage.candidates_token_count or 0
-            cached_tokens += usage.cached_content_token_count or 0
-            total_tokens += usage.total_token_count or 0
-        if event.get_function_calls():
-            tool_calls += 1
+    event_count = 0
+    for session_summary in listing.sessions:
+        session = await session_service.get_session(
+            app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID, session_id=session_summary.id
+        )
+        for event in session.events if session is not None else []:
+            usage = event.usage_metadata
+            if usage is not None:
+                prompt_tokens += usage.prompt_token_count or 0
+                completion_tokens += usage.candidates_token_count or 0
+                cached_tokens += usage.cached_content_token_count or 0
+                total_tokens += usage.total_token_count or 0
+            if event.get_function_calls():
+                tool_calls += 1
+            event_count += 1
 
     return {
-        "event_count": len(events),
+        "event_count": event_count,
         "tool_calls": tool_calls,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
@@ -322,45 +321,80 @@ def _workspace_identity(workspace_root: Path) -> tuple[str, int | str]:
     return workspace_id, workspace_version
 
 
-def _build_session(task_dir: Path) -> tuple[DatabaseSessionService, str]:
-    """Builds the run's shared session service and a fresh session.
+def _render_source_tree(manifest_path: Path) -> str:
+    """Renders the workspace's source tree from manifest.json -- no model call.
 
-    Points sqlalchemy at <task_dir>/sessions.db. Every write_report() call
-    gets its own fresh session_id, never resumed; sessions.db accumulates
-    exactly one row per run -- it lives in this run's own task_dir.
+    Mirrors the structural pass workspace-summary's own instructions
+    describe (source_id, source_role, hierarchy via parent_source_id) as
+    plain text, computed directly over already-structured JSON. No
+    natural-language judgment is involved, so this needs no LlmAgent turn.
     """
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    sources = {source["source_id"]: source for source in manifest.get("sources", [])}
+    children: dict[str | None, list[str]] = defaultdict(list)
+    for source_id, source in sources.items():
+        children[source.get("parent_source_id")].append(source_id)
+
+    lines: list[str] = []
+
+    def _render(source_id: str, depth: int) -> None:
+        source = sources[source_id]
+        role = source.get("source_role")
+        label = f"{source_id} ({role})" if role else source_id
+        lines.append(f"{'  ' * depth}- {label}: {source['original_filename']}")
+        for child_id in sorted(children.get(source_id, [])):
+            _render(child_id, depth + 1)
+
+    for root_id in sorted(children.get(None, [])):
+        _render(root_id, 0)
+
+    return "\n".join(lines) if lines else "(no sources)"
+
+
+def _open_session_service(task_dir: Path) -> DatabaseSessionService:
+    """Opens this task's sessions.db, without creating a session in it."""
     db_path = task_dir / _SESSIONS_DB_NAME
-    session_service = DatabaseSessionService(db_url=f"sqlite+aiosqlite:///{db_path}")
+    return DatabaseSessionService(db_url=f"sqlite+aiosqlite:///{db_path}")
+
+
+def _build_session(task_dir: Path) -> tuple[DatabaseSessionService, str]:
+    """Builds a fresh, isolated session against this task's sessions.db.
+
+    Every call_group gets its own session (docs/per_group_session_isolation.md)
+    -- one row per call, no shared history across groups -- all still in
+    the same <task_dir>/sessions.db file.
+    """
+    session_service = _open_session_service(task_dir)
     session = asyncio.run(
         session_service.create_session(app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID)
     )
     return session_service, session.id
 
 
-def _build_instruction(skill: Skill, call_group: CallGroup) -> str:
+def _build_instruction(
+    skill: Skill, call_group: CallGroup, source_tree: str, values: dict[str, dict]
+) -> str:
     field_list = "\n".join(
         f"- **{variable.name}**: {variable.description}" for variable in call_group.variables
     )
-    return f"{skill.instructions}\n\n## Fields for this call\n\n{field_list}"
+    sections = [skill.instructions, f"## Source tree\n\n{source_tree}"]
+    extracted = _render_already_extracted(values)
+    if extracted:
+        sections.append(f"## Already extracted\n\n{extracted}")
+    sections.append(f"## Fields for this call\n\n{field_list}")
+    return "\n\n".join(sections)
 
 
-def _build_bootstrap_agent(
-    workspace_root: Path,
-    model: str,
-    structure_skill: Skill,
-    extra_skills: Sequence[Skill] = (),
-) -> LlmAgent:
-    """Builds the once-per-run agent that primes the shared session with workspace structure."""
-    tools: list[object] = [
-        *make_workspace_tools(workspace_root, agent_model=model),
-        SkillToolset(skills=[structure_skill, *extra_skills]),
-    ]
-    return LlmAgent(
-        model=LiteLlm(model=model),
-        name=_EXTRACTOR_AGENT_NAME,
-        instruction=_BOOTSTRAP_PROMPT,
-        tools=tools,
-    )
+def _render_already_extracted(values: dict[str, dict]) -> str:
+    """Bare field_name: value pairs for coherence, not the final citation-bearing render."""
+    lines = []
+    for name, result in values.items():
+        if result.get("status") != "found":
+            continue
+        value = result.get("value")
+        rendered = value if isinstance(value, str) else json.dumps(value)
+        lines.append(f"- **{name}**: {rendered}")
+    return "\n".join(lines)
 
 
 def _build_bounded_agent(
@@ -390,19 +424,12 @@ def _run_bounded_call(
     session_service: BaseSessionService,
     session_id: str,
     prompt: str,
-    *,
-    expect_output: bool = True,
 ) -> dict:
-    """Runs one bounded LlmAgent turn against the shared session.
+    """Runs one bounded LlmAgent turn against its own isolated session.
 
-    Returns its validated output_key state, or {} when expect_output is
-    False (the bootstrap turn has no structured output to collect).
+    Returns its validated output_key state.
     """
-    return asyncio.run(
-        _run_bounded_call_async(
-            agent, session_service, session_id, prompt, expect_output=expect_output
-        )
-    )
+    return asyncio.run(_run_bounded_call_async(agent, session_service, session_id, prompt))
 
 
 async def _run_bounded_call_async(
@@ -410,8 +437,6 @@ async def _run_bounded_call_async(
     session_service: BaseSessionService,
     session_id: str,
     prompt: str,
-    *,
-    expect_output: bool,
 ) -> dict:
     runner = Runner(agent=agent, app_name=_RUNNER_APP_NAME, session_service=session_service)
     next_prompt = prompt
@@ -438,9 +463,6 @@ async def _run_bounded_call_async(
             raise RuntimeError(f"Model call for '{agent.name}' failed: {error}") from error
         else:
             break
-
-    if not expect_output:
-        return {}
 
     updated = await session_service.get_session(
         app_name=_RUNNER_APP_NAME, user_id=_RUNNER_USER_ID, session_id=session_id

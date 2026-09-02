@@ -12,6 +12,18 @@ this and deferred it: *"Multi-`call_group` session/Working-State
 continuity... Applies when the non-clinical skill is built."* The 10-group,
 61-variable non-clinical `study_variables.json` config is that skill.
 
+> **Superseded (core decision):** one shared session spanning bootstrap
+> and every `call_group` turn is replaced by
+> `docs/per_group_session_isolation.md` — it hit a hard TPM rate-limit
+> failure in production (~190k tokens accumulated by the 6th group).
+> Sessions are now isolated per `call_group`, with prior groups' extracted
+> values injected as static text instead of carried via shared history.
+> The bootstrap turn itself is also eliminated there, replaced by a
+> deterministic function. Kept here for history; the durable,
+> queryable-transcript rationale (Why, `DatabaseSessionService` choice)
+> still applies — it's the *sharing across groups* that's superseded, not
+> persistence itself.
+
 ## Why
 
 Every `call_group` today runs in its own isolated `InMemoryRunner`/session

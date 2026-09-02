@@ -11,12 +11,14 @@ fields for this call are listed at the end of your instructions.
 
 ## Steps
 
-1. This session's first turn already built the source tree via
-   `workspace-summary` — sources, roles, hierarchy, no per-source section
-   index. Use `grep_workspace` (its surrounding context usually covers a
-   claim in one call) to find what this call's fields need, then
-   `read_workspace_file` with `offset`/`limit` to pull more around a
-   confirmed-relevant spot if needed.
+1. Your instructions already include a **Source tree** section (sources,
+   roles, hierarchy) and, once earlier call groups have run, an
+   **Already extracted** section with their values — neither took a turn
+   to build; this session starts fresh otherwise. Use `grep_workspace`
+   (its surrounding context usually covers a claim in one call) to find
+   what this call's fields need, then `read_workspace_file` with
+   `offset`/`limit` to pull more around a confirmed-relevant spot if
+   needed.
 2. Load the `evidence-grounding` skill and apply its status, citation,
    image-evidence, and writing-style rules to every field.
 3. Keep **results** and **discussion** strictly separate: state findings
