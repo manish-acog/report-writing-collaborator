@@ -452,6 +452,11 @@ class DocumentNormalizer:
             page_chunks=True,
             filename="document",
             image_path=str(image_path),
+            # Library default is 0.05 (5% of page width/height) -- too low to
+            # filter a repeated letterhead/banner, which clears it easily.
+            # Explicit, deliberate threshold instead of an implicit dependency
+            # on pymupdf4llm's own default (docs/pdf_image_extraction_limits.md).
+            image_size_limit=0.10,
             show_progress=False,
         )
         if not isinstance(raw_chunks, list):
@@ -475,13 +480,25 @@ class DocumentNormalizer:
         return normalized_path
 
     def _collect_assets(self, source_id: str) -> tuple[Asset, ...]:
+        # pymupdf4llm writes one file per occurrence, not per unique image --
+        # a logo repeated on every page produces one identical file per page.
+        # Every file stays on disk exactly as written; only the returned
+        # Asset list collapses to one entry per unique SHA-256, first
+        # occurrence in sorted-path order (docs/pdf_image_extraction_limits.md).
         assets_dir = self._assets_dir(source_id)
 
-        return tuple(
-            Asset(path=self._relative(path), sha256=_sha256(path))
-            for path in sorted(assets_dir.iterdir())
-            if path.is_file()
-        )
+        assets: list[Asset] = []
+        seen_hashes: set[str] = set()
+        for path in sorted(assets_dir.iterdir()):
+            if not path.is_file():
+                continue
+            sha256 = _sha256(path)
+            if sha256 in seen_hashes:
+                continue
+            seen_hashes.add(sha256)
+            assets.append(Asset(path=self._relative(path), sha256=sha256))
+
+        return tuple(assets)
 
     def _validate(self, document: NormalizedDocument) -> None:
         source_path = self._workspace_path(document.original_path)

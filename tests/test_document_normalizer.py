@@ -162,6 +162,22 @@ def test_pdf_normalization_preserves_provenance(tmp_path: Path) -> None:
     assert result.warnings == ()
 
 
+def test_collect_assets_dedupes_identical_content(tmp_path: Path) -> None:
+    normalizer = DocumentNormalizer(tmp_path / "staging")
+    source_id = "src_test"
+    assets_dir = normalizer._assets_dir(source_id)
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "page-0001.png").write_bytes(b"\x89PNGduplicate")
+    (assets_dir / "page-0002.png").write_bytes(b"\x89PNGduplicate")
+    (assets_dir / "page-0003.png").write_bytes(b"\x89PNGdistinct")
+
+    assets = normalizer._collect_assets(source_id)
+
+    assert [Path(asset.path).name for asset in assets] == ["page-0001.png", "page-0003.png"]
+    # Duplicate file itself is untouched -- only the returned asset list dedupes.
+    assert (assets_dir / "page-0002.png").is_file()
+
+
 def test_named_destination_link_is_internal(tmp_path: Path) -> None:
     source = tmp_path / "cited.pdf"
     _make_pdf(source)
