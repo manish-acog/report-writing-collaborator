@@ -44,10 +44,11 @@ code directly:
 - **New: a post-write size filter** — after `pymupdf4llm` writes a
   page's images, read each written file's own pixel dimensions and
   compare against that page's full-page-equivalent pixel size at the same
-  `dpi` (`page.rect.width/height * dpi/72`); drop files whose width and
-  height both fall under 10% of the corresponding page dimension. Applied
-  post-write, not via any `pymupdf4llm` kwarg — there isn't one that
-  works under the active layout engine.
+  `dpi` (`page.rect.width/height * dpi/72`); drop files whose width **or**
+  height falls under 10% of the corresponding page dimension — either
+  alone is enough, not both required. Applied post-write, not via any
+  `pymupdf4llm` kwarg — there isn't one that works under the active
+  layout engine.
 - **`_collect_assets`** — hashes every extracted image file; keeps only
   the first occurrence (by sorted path) of each unique SHA-256. Duplicate
   files stay on disk exactly as `pymupdf4llm` wrote them — nothing is
@@ -126,6 +127,28 @@ correctly.
   expected pattern, so a library-side naming change fails loud instead of
   quietly disabling the filter.
 
+### Superseded: filter required both dimensions small, not either
+
+- **What changed:** the original implementation filtered only when width
+  **and** height both fell under 10% — real-world verification against
+  two actual documents found this too narrow. A small, roughly square
+  logo (Cayuse's) was correctly filtered. A wide letterhead banner
+  (Charles River's, ~27-31% of page width but a thin strip vertically)
+  was not — its width clears 10% even though its height doesn't, and
+  `and` requires both to fail.
+- **Replacement:** width **or** height under 10% is enough to filter —
+  see Shape. This also corrects an inconsistency with `pymupdf4llm`'s own
+  legacy (pre-layout-engine) `image_size_limit` implementation
+  (`pymupdf_rag.py`), which used `or`, not `and`, for the same check —
+  the original choice here diverged from the library's own precedent
+  without a reason to.
+- **Consequences:** a real content image that happens to be a wide, thin
+  strip (e.g. a horizontal color scale, a single-row timeline) could now
+  be filtered from `manifest.assets[]` too — accepted, since it's rare for
+  this project's actual documents and, unlike deletion, the file stays on
+  disk and directly readable via `inspect_image` by path; nothing is
+  lost, only excluded from automatic iteration.
+
 ## Not doing
 
 - **Similarity-based (non-exact) deduplication** — e.g. perceptual
@@ -158,18 +181,19 @@ duplicate file is still on disk, untouched. Independently re-verified
 against a real multi-page document: a logo repeated across 7 pages,
 byte-identical, collapses to exactly 1 asset entry.
 
-**Size filter: implemented and confirmed correct.** `_parse_pdf` now
-passes `dpi=150` explicitly (`_IMAGE_DPI`, matching the library's own
-prior implicit default — not a behavior change to rendering, just a
-fixed value the filter below can compare against). `_collect_assets`
-opens the source PDF once and, for every file already moved into
-`assets_dir`, parses its page number from the filename and skips it
-(excludes it from the returned `Asset` list — same "never touch disk"
-principle as dedup, for the same reason: `pymupdf4llm`'s own Markdown
-already references every written file by path, and deleting one would
-dangle that reference) when both its own pixel width and height fall
-under 10% of its source page's full-page-equivalent pixel size at that
-dpi.
+**Size filter: implemented, but with the `and`/`or` bug described in the
+superseded Decision above — not yet corrected.** `_parse_pdf` now passes
+`dpi=150` explicitly (`_IMAGE_DPI`, matching the library's own prior
+implicit default — not a behavior change to rendering, just a fixed
+value the filter below can compare against). `_collect_assets` opens the
+source PDF once and, for every file already moved into `assets_dir`,
+parses its page number from the filename and excludes it from the
+returned `Asset` list (same "never touch disk" principle as dedup) when
+**both** its own pixel width and height fall under 10% of its source
+page's full-page-equivalent pixel size at that dpi — the condition that
+real-world verification found too narrow (misses wide-but-short
+banners). Needs changing to **either** width or height under 10%; see
+Next.
 
 One correction found while implementing: the filename convention's
 prefix is *not* the `filename=` kwarg passed to `to_markdown()` — traced
@@ -196,4 +220,18 @@ real two-page PDF (a 400x400px content image, a 12x12px decorative
 graphic): both files land in `assets_dir`; only the large one appears in
 `result.assets`.
 
-Full preflight run: 141 passed, `ruff check .` and `ty check src` clean.
+Full preflight run (before the `and`/`or` correction above): 141 passed,
+`ruff check .` and `ty check src` clean.
+
+## Next
+
+In `_is_undersized_image`, change the filter condition from `and` to
+`or`: exclude a file when its pixel width falls under 10% of the page's
+full-page-equivalent width, **or** its pixel height falls under 10% of
+the page's full-page-equivalent height — either alone is sufficient, not
+both required. Update the function's docstring/comment accordingly (it
+currently states "both, not either"). Add a regression test for the case
+the `and` version missed: a synthetic image wide relative to its page but
+short (e.g. width at 90% of page width, height at 5%) must be filtered;
+confirm the existing "real content image survives" case (large in both
+dimensions) still passes under `or`. Full preflight after.
