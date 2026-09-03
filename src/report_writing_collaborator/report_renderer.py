@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
@@ -56,6 +57,7 @@ def render(
     template_path: Path,
     values: Mapping[str, Mapping[str, object]],
     workspace_root: Path,
+    output_dir: Path | None = None,
 ) -> str:
     """Substitutes every `{{variable}}` placeholder in template_path.
 
@@ -67,6 +69,11 @@ def render(
             `{"status": "not_found"}` -- the shape variable_config's output
             schema produces.
         workspace_root: Published workspace containing the citation evidence.
+        output_dir: Directory the rendered report will be written to. A
+            citation link is relative, so it must be computed from here, not
+            from workspace_root -- the two differ whenever the report lives
+            outside workspace_root (e.g. under its .tasks/<task_id>/).
+            Defaults to workspace_root itself (no prefix needed).
 
     Returns:
         The rendered report text.
@@ -96,10 +103,12 @@ def render(
         name: _render_field(name, field, citation_numbers, template_path.suffix)
         for name, field in fields
     }
+    link_base = _relative_link_base(workspace_root, output_dir or workspace_root)
     substitutions[_REFERENCES_KEY] = _render_references(
         citations,
         template_path.suffix,
         workspace_root,
+        link_base,
     )
 
     def replace(match: re.Match[str]) -> str:
@@ -222,6 +231,7 @@ def _render_references(
     citations: list[Mapping[str, object]],
     template_suffix: str,
     workspace_root: Path,
+    link_base: str,
 ) -> str:
     if not citations:
         return _NO_CITATIONS_HTML if template_suffix == _HTML_SUFFIX else _NO_CITATIONS_MARKDOWN
@@ -233,14 +243,14 @@ def _render_references(
     ]
     if template_suffix == _HTML_SUFFIX:
         items = "".join(
-            f'<li id="ref-{reference.number}">{_format_html(reference, sources)}</li>'
+            f'<li id="ref-{reference.number}">{_format_html(reference, sources, link_base)}</li>'
             for reference in references
         )
         return f"<ol>{items}</ol>"
 
     return "\n".join(
         f'<a id="ref-{reference.number}"></a>\n'
-        f"{reference.number}. {_format_markdown(reference, sources)}"
+        f"{reference.number}. {_format_markdown(reference, sources, link_base)}"
         for reference in references
     )
 
@@ -324,21 +334,34 @@ def _resolve_reference(
     )
 
 
-def _source_href(source: _Source, page: int | None) -> str:
+def _source_href(source: _Source, page: int | None, link_base: str) -> str:
     if source.citation_url:
         return source.citation_url
 
     href = quote(source.original_path, safe="/")
+    if link_base:
+        href = f"{link_base}/{href}"
     if page is not None and source.original_path.casefold().endswith(".pdf"):
         return f"{href}#page={page}"
 
     return href
 
 
-def _format_markdown(reference: _Reference, sources: Mapping[str, _Source]) -> str:
+def _relative_link_base(workspace_root: Path, output_dir: Path) -> str:
+    """The path prefix a citation link needs to reach workspace_root from output_dir.
+
+    Empty when the report is rendered directly into workspace_root (the
+    common case in tests and rerender_task); non-empty whenever the report
+    is written elsewhere, e.g. write_report's .tasks/<task_id>/ archive.
+    """
+    relative = os.path.relpath(workspace_root.resolve(), start=output_dir.resolve())
+    return "" if relative == os.curdir else relative.replace(os.sep, "/")
+
+
+def _format_markdown(reference: _Reference, sources: Mapping[str, _Source], link_base: str) -> str:
     source = reference.source
     name = _escape_markdown(source.original_filename)
-    text = f"[{name}]({_source_href(source, reference.page)})"
+    text = f"[{name}]({_source_href(source, reference.page, link_base)})"
     if source.source_role:
         text += f" ({_escape_markdown(source.source_role)})"
     if source.parent_source_id:
@@ -349,9 +372,9 @@ def _format_markdown(reference: _Reference, sources: Mapping[str, _Source]) -> s
     return text
 
 
-def _format_html(reference: _Reference, sources: Mapping[str, _Source]) -> str:
+def _format_html(reference: _Reference, sources: Mapping[str, _Source], link_base: str) -> str:
     source = reference.source
-    href = html.escape(_source_href(source, reference.page), quote=True)
+    href = html.escape(_source_href(source, reference.page, link_base), quote=True)
     name = html.escape(source.original_filename)
     text = f'<a href="{href}">{name}</a>'
     if source.source_role:

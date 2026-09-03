@@ -39,7 +39,10 @@ Apply these rules to every schema-constrained report field.
    complete markers next to each other. Never put a page range into one
    citation.
 8. **Inspect images only when needed.** Use `inspect_image` only when a field's
-   evidence actually depends on what it shows — most fields won't need it.
+   evidence actually depends on what it shows — most fields won't need it. One
+   reliable tell: a heading like "Results"/"Data"/"Analysis" followed by images
+   and little or no surrounding text — that shape means the finding lives in
+   the image, not the prose, so inspect it before deciding `not_found`.
 9. **Write clearly and efficiently, not tersely.** One point per sentence, no
    padding or restated ideas, plain neutral language over editorializing
    (state what the evidence shows, not how impressive or concerning it is).

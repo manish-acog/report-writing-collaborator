@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Final Report — Research Report Template (In Vivo)</title>
+<!--
+  Skeleton only: headings/order/boilerplate are fixed and must not be
+  reordered or removed by generation. Elements with `data-slot-id` are the
+  only elements a report-writing agent/frontend may write into; each carries
+  `data-slot-type` (field | text | table | list) as a hint for how it should
+  be rendered/edited. No branding CSS included here — layer that on separately
+  for the reviewer-facing render.
+-->
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; max-width: 860px; margin: 2rem auto; line-height: 1.5; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; }
+  th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; vertical-align: top; }
+  .slot { background: #fff8dc; }
+  .notice { font-style: italic; color: #555; }
+  .cover dt { font-weight: bold; margin-top: 0.75rem; }
+  .cover dd { margin: 0; }
+  nav ol, nav ol ol { padding-left: 1.25rem; }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <h1>Final Report</h1>
+  <p><strong>In Vivo Biology Research</strong></p>
+
+  <dl>
+    <dt>Study Title</dt>
+    <dd><span class="slot" id="study_title" data-slot-type="field">{{study_title}}</span></dd>
+
+    <dt>Sponsor Address</dt>
+    <dd>BioMarin Pharmaceutical Inc.<br />105 Digital Drive<br />Novato, CA 94949</dd>
+
+    <dt>Testing Facility</dt>
+    <dd>BioMarin Pharmaceutical Inc.<br />1600 Fisher Drive<br />Petaluma, CA 94954</dd>
+
+    <dt>Study Number</dt>
+    <dd>Study No. <span class="slot" id="study_number" data-slot-type="field">{{study_number}}</span></dd>
+
+    <dt>Report Issue Date</dt>
+    <dd class="notice">(Date report signed by Study Director -- completed at signature, not extracted)</dd>
+  </dl>
+
+  <p class="notice">Proprietary and Confidential</p>
+</header>
+
+<hr />
+
+<nav aria-label="Table of Contents">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#sec-1">Approval</a></li>
+    <li><a href="#sec-2">Summary</a></li>
+    <li><a href="#sec-3">Study Information</a></li>
+    <li><a href="#sec-4">Objective</a></li>
+    <li><a href="#sec-5">Compliance Statement</a></li>
+    <li><a href="#sec-6">Deviations</a></li>
+    <li><a href="#sec-7">Materials and Methods</a>
+      <ol>
+        <li><a href="#sec-7-1">Test and Control Article</a>
+          <ol>
+            <li><a href="#sec-7-1-1">Test Article</a></li>
+            <li><a href="#sec-7-1-2">Control Article</a></li>
+            <li><a href="#sec-7-1-3">Test and Control Article Characterization</a></li>
+            <li><a href="#sec-7-1-4">Dose Formulation and Analysis</a></li>
+          </ol>
+        </li>
+        <li><a href="#sec-7-2">Test System</a>
+          <ol>
+            <li><a href="#sec-7-2-1">Animal Identification</a></li>
+            <li><a href="#sec-7-2-2">Environmental Acclimation</a></li>
+            <li><a href="#sec-7-2-3">Housing and Environmental Conditions</a></li>
+            <li><a href="#sec-7-2-4">Feed and Water</a></li>
+            <li><a href="#sec-7-2-5">Animal Treatment</a></li>
+          </ol>
+        </li>
+        <li><a href="#sec-7-3">Experimental Design</a></li>
+        <li><a href="#sec-7-4">Dose Administration</a></li>
+        <li><a href="#sec-7-5">Justification of Dosing Route and Dose Level</a></li>
+        <li><a href="#sec-7-6">In Life Procedures</a>
+          <ol>
+            <li><a href="#sec-7-6-1">Animal Observations</a></li>
+            <li><a href="#sec-7-6-2">Body Weights</a></li>
+            <li><a href="#sec-7-6-3">Other In-Life Procedures</a></li>
+            <li><a href="#sec-7-6-4">Sample Collection during In-Life</a></li>
+            <li><a href="#sec-7-6-5">Sample Analysis</a></li>
+          </ol>
+        </li>
+        <li><a href="#sec-7-7">Terminal Procedures</a>
+          <ol>
+            <li><a href="#sec-7-7-1">Method of Euthanasia</a></li>
+            <li><a href="#sec-7-7-2">Deaths and Unscheduled Euthanasias</a></li>
+            <li><a href="#sec-7-7-3">Scheduled Euthanasia and Necropsy</a></li>
+            <li><a href="#sec-7-7-4">Terminal Sample Collection</a></li>
+            <li><a href="#sec-7-7-5">Tissue Collection/Preservation and Organ Weights</a></li>
+            <li><a href="#sec-7-7-6">Histopathology</a></li>
+          </ol>
+        </li>
+      </ol>
+    </li>
+    <li><a href="#sec-8">Results</a>
+      <ol>
+        <li><a href="#sec-8-1">Dose Analysis</a></li>
+        <li><a href="#sec-8-2">In-Life Procedures</a></li>
+      </ol>
+    </li>
+    <li><a href="#sec-9">Discussion</a></li>
+    <li><a href="#sec-10">Conclusions</a></li>
+    <li><a href="#sec-11">References</a></li>
+    <li><a href="#sec-12">Appendices</a></li>
+  </ol>
+
+  <p><strong>List of Tables</strong></p>
+  <ul>
+    <li>Table 1: Experimental Design</li>
+    <li>Table 2: Tissue Collection and Organ Weights</li>
+  </ul>
+
+  <p><strong>List of Appendices</strong></p>
+  <ul>
+    <li>Appendix 1: Test and Control Article Characterization</li>
+  </ul>
+</nav>
+
+<hr />
+
+<section id="sec-1">
+  <h2>1 APPROVAL</h2>
+  <p>To the best of our knowledge, the report accurately describes the study conduct and results.</p>
+  <p class="notice">Electronic signatures appended on the last page of this report.</p>
+  <table>
+    <thead><tr><th>Role</th><th>Name</th><th>Title</th></tr></thead>
+    <tbody>
+      <tr><td>Report Author</td><td class="slot" id="report_author_name" data-slot-type="field">{{report_author}}</td><td>Report Author</td></tr>
+      <tr><td>Study Director / Principal Investigator</td><td class="slot" id="study_director_or_pi_name" data-slot-type="field">{{study_director}}</td><td>Study Director (or Principal Investigator for In-Life or In Vivo Scientist Lead) and Author</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="sec-2">
+  <h2>2 SUMMARY</h2>
+  <p><span class="slot" id="study_objective" data-slot-type="text">{{study_objective}}</span>.</p>
+  <p>The study was conducted at BioMarin Pharmaceutical Inc. (Petaluma, California, USA). In life initiated on
+    <span class="slot" id="day_of_first_dose" data-slot-type="field">{{day_of_first_dose}}</span>
+    and the study completed the date this report was signed.</p>
+  <p><span class="slot" id="total_number_of_animals" data-slot-type="field">{{total_number_of_animals}}</span>
+    <span class="slot" id="animal_species" data-slot-type="field">{{animal_species}}</span>
+    <span class="slot" id="animal_supplier" data-slot-type="field">{{animal_supplier}}</span>
+    were approximately <span class="slot" id="age_of_dosing" data-slot-type="field">{{age_of_dosing}}</span>
+    old with body weights as <span class="slot" id="animal_weight_at_dosing" data-slot-type="field">{{animal_weight_at_dosing}}</span>
+    at study initiation. Animals were assigned to <span class="slot" id="number_of_study_groups" data-slot-type="field">{{number_of_study_groups}}</span>
+    groups. The study design is presented in the following table.</p>
+  <div class="slot" id="study_summary" data-slot-type="text">{{study_summary}}</div>
+  <h4>Table 1: Experimental Design</h4>
+  <div class="slot" id="experimental_design_table" data-slot-type="table">{{experimental_design_table}}</div>
+  <div class="slot" id="executive_summary_of_key_results" data-slot-type="text">{{executive_summary_of_key_results}}</div>
+  <div class="slot" id="study_conclusions_brief_summary" data-slot-type="text">{{study_conclusions_brief_summary}}</div>
+</section>
+
+<section id="sec-3">
+  <h2>3 STUDY INFORMATION</h2>
+  <p><strong>Study Title:</strong> <span class="slot" id="study_title_ref" data-slot-type="field">{{study_title}}</span></p>
+  <p><strong>Study Number:</strong> <span class="slot" id="study_number_ref" data-slot-type="field">{{study_number}}</span></p>
+  <p><strong>In Life Dates:</strong>
+    <span class="slot" id="day_of_first_dose_ref" data-slot-type="field">{{day_of_first_dose}}</span> –
+    <span class="slot" id="last_day_of_necropsy_ref" data-slot-type="field">{{last_day_of_necropsy}}</span></p>
+  <p><strong>Sponsor Address:</strong> BioMarin Pharmaceutical Inc. 105 Digital Drive Novato, CA 94949</p>
+
+  <h3 id="sec-3-facility">Testing Facility Location</h3>
+  <p>BioMarin Pharmaceutical Inc. 1600 Fisher Drive Petaluma, CA 94954</p>
+
+  <h3 id="sec-3-director">Study Director</h3>
+  <p><span class="slot" id="study_director" data-slot-type="field">{{study_director}}</span><br />BioMarin Pharmaceutical Inc.</p>
+
+  <h3 id="sec-3-author">Report Author</h3>
+  <p><span class="slot" id="report_author" data-slot-type="field">{{report_author}}</span> BioMarin Pharmaceutical Inc.</p>
+
+  <h3 id="sec-3-pi">Principal Investigator for study endpoint</h3>
+  <p><span class="slot" id="principal_investigator" data-slot-type="field">{{principal_investigator}}</span> BioMarin Pharmaceutical Inc.</p>
+
+  <h3 id="sec-3-personnel">Additional Study Personnel for study endpoint</h3>
+  <div class="slot" id="additional_study_personnel" data-slot-type="list">{{additional_study_personnel}}</div>
+</section>
+
+<section id="sec-4">
+  <h2>4 OBJECTIVE</h2>
+  <div class="slot" id="study_objective_ref" data-slot-type="text">{{study_objective}}</div>
+</section>
+
+<section id="sec-5">
+  <h2>5 COMPLIANCE STATEMENT</h2>
+  <p>This study was not considered to be within the scope of the Good Laboratory Practice (GLP) Regulations. This non-GLP study was conducted in accordance with applicable BioMarin SOPs and animal procedures approved by the BioMarin Institution Animal Care and Use Committee (IACUC).</p>
+</section>
+
+<section id="sec-6">
+  <h2>6 DEVIATIONS</h2>
+  <div class="slot" id="deviations_table" data-slot-type="table">{{deviations_table}}</div>
+</section>
+
+<section id="sec-7">
+  <h2>7 MATERIALS AND METHODS</h2>
+
+  <h3 id="sec-7-1">7.1 Test and Control Article</h3>
+
+  <h4 id="sec-7-1-1">7.1.1 Test Article</h4>
+  <table>
+    <tbody>
+      <tr><th>Name</th><td class="slot" id="test_article_name" data-slot-type="field">{{test_article_name}}</td></tr>
+      <tr><th>Description</th><td class="slot" id="test_article_description" data-slot-type="text">{{test_article_description}}</td></tr>
+      <tr><th>Lot Number</th><td class="slot" id="test_article_lot_number" data-slot-type="field">{{test_article_lot_number}}</td></tr>
+      <tr><th>Expiration Date</th><td class="slot" id="test_article_expiration_date" data-slot-type="field">{{test_article_expiration_date}}</td></tr>
+      <tr><th>Manufacturer/Supplier</th><td class="slot" id="test_article_manufacturer_supplier" data-slot-type="field">{{test_article_manufacturer_supplier}}</td></tr>
+      <tr><th>Storage</th><td class="slot" id="test_article_storage" data-slot-type="field">{{test_article_storage}}</td></tr>
+    </tbody>
+  </table>
+
+  <h4 id="sec-7-1-2">7.1.2 Control Article</h4>
+  <table>
+    <tbody>
+      <tr><th>Name</th><td class="slot" id="control_article_name" data-slot-type="field">{{control_article_name}}</td></tr>
+      <tr><th>Lot Number</th><td class="slot" id="control_article_lot_number" data-slot-type="field">{{control_article_lot_number}}</td></tr>
+      <tr><th>Expiration Date</th><td class="slot" id="control_article_expiration_date" data-slot-type="field">{{control_article_expiration_date}}</td></tr>
+      <tr><th>Manufacturer/Supplier</th><td class="slot" id="control_article_manufacturer_supplier" data-slot-type="field">{{control_article_manufacturer_supplier}}</td></tr>
+      <tr><th>Storage</th><td class="slot" id="control_article_storage" data-slot-type="field">{{control_article_storage}}</td></tr>
+    </tbody>
+  </table>
+
+  <h4 id="sec-7-1-3">7.1.3 Test and Control Article Characterization</h4>
+  <div class="slot" id="test_and_control_article_characterization" data-slot-type="text">{{test_and_control_article_characterization}}</div>
+
+  <h4 id="sec-7-1-4">7.1.4 Dose Formulation and Analysis</h4>
+  <div class="slot" id="dose_preparation_and_analysis_for_test_or_control_articles" data-slot-type="text">{{dose_preparation_and_analysis_for_test_or_control_articles}}</div>
+
+  <h3 id="sec-7-2">7.2 Test System</h3>
+  <table>
+    <tbody>
+      <tr><th>Species</th><td class="slot" id="animal_species_ref" data-slot-type="field">{{animal_species}}</td></tr>
+      <tr><th>Strain</th><td class="slot" id="animal_strains" data-slot-type="field">{{animal_strains}}</td></tr>
+      <tr><th>Source</th><td class="slot" id="animal_supplier_ref" data-slot-type="field">{{animal_supplier}}</td></tr>
+      <tr><th>No. of Animals Assigned (Total)</th><td class="slot" id="total_number_of_animals_ref" data-slot-type="field">{{total_number_of_animals}}</td></tr>
+      <tr><th>Age at Initiation of Dosing</th><td class="slot" id="age_of_dosing_ref" data-slot-type="field">{{age_of_dosing}}</td></tr>
+      <tr><th>Weight Range at Initiation of Dosing</th><td class="slot" id="animal_weight_at_dosing_ref" data-slot-type="field">{{animal_weight_at_dosing}}</td></tr>
+    </tbody>
+  </table>
+  <div class="slot" id="justification_for_species_selection" data-slot-type="text">{{justification_for_species_selection}}</div>
+  <div class="slot" id="additional_animal_information" data-slot-type="text">{{additional_animal_information}}</div>
+
+  <h4 id="sec-7-2-1">7.2.1 Animal Identification</h4>
+  <p>Animals were identified by <span class="slot" id="animal_identification" data-slot-type="text">{{animal_identification}}</span>.</p>
+
+  <h4 id="sec-7-2-2">7.2.2 Environmental Acclimation</h4>
+  <p>After receipt, animals were acclimated for at least <span class="slot" id="environmental_acclimation" data-slot-type="field">{{environmental_acclimation}}</span> prior to initiation of dosing.</p>
+
+  <h4 id="sec-7-2-3">7.2.3 Housing and Environmental Conditions</h4>
+  <div class="slot" id="housing_environment_conditions" data-slot-type="text">{{housing_environment_conditions}}</div>
+
+  <h4 id="sec-7-2-4">7.2.4 Feed and Water</h4>
+  <div class="slot" id="food_and_water_provided" data-slot-type="text">{{food_and_water_provided}}</div>
+
+  <h4 id="sec-7-2-5">7.2.5 Animal Treatment</h4>
+  <p>In accordance with the Animal Welfare Act, the Guide for the Care and Use of Laboratory Animals, and the Office of Laboratory Animal Welfare, necessary medical treatment was given to prevent unacceptable pain and suffering, including euthanasia.</p>
+
+  <h3 id="sec-7-3">7.3 Experimental Design</h3>
+  <div class="slot" id="experimental_design" data-slot-type="text">{{experimental_design}}</div>
+  <div class="slot" id="experimental_design_table_ref" data-slot-type="table">{{experimental_design_table}}</div>
+
+  <h3 id="sec-7-4">7.4 Dose Administration</h3>
+  <p><span class="slot" id="dose_administration" data-slot-type="text">{{dose_administration}}</span>. The dosing log is maintained in the study records.</p>
+
+  <h3 id="sec-7-5">7.5 Justification of Dosing Route and Dose Level</h3>
+  <div class="slot" id="justification_for_dosage_selection" data-slot-type="text">{{justification_for_dosage_selection}}</div>
+
+  <h3 id="sec-7-6">7.6 In Life Procedures</h3>
+
+  <h4 id="sec-7-6-1">7.6.1 Animal Observations</h4>
+  <div class="slot" id="timepoints_when_animals_observed" data-slot-type="text">{{timepoints_when_animals_observed}}</div>
+
+  <h4 id="sec-7-6-2">7.6.2 Body Weights</h4>
+  <div class="slot" id="timepoints_when_body_weights_measured" data-slot-type="text">{{timepoints_when_body_weights_measured}}</div>
+
+  <h4 id="sec-7-6-3">7.6.3 Other In-Life Procedures</h4>
+  <div class="slot" id="in_life_procedures" data-slot-type="text">{{in_life_procedures}}</div>
+
+  <h4 id="sec-7-6-4">7.6.4 Sample Collection during In-Life</h4>
+  <div class="slot" id="in_life_sample_collections" data-slot-type="text">{{in_life_sample_collections}}</div>
+
+  <h4 id="sec-7-6-5">7.6.5 Sample Analysis</h4>
+  <div class="slot" id="in_life_sample_analysis" data-slot-type="text">{{in_life_sample_analysis}}</div>
+
+  <h3 id="sec-7-7">7.7 Terminal Procedures</h3>
+
+  <h4 id="sec-7-7-1">7.7.1 Method of Euthanasia</h4>
+  <div class="slot" id="methods_of_euthanasia" data-slot-type="text">{{methods_of_euthanasia}}</div>
+
+  <h4 id="sec-7-7-2">7.7.2 Deaths and Unscheduled Euthanasias</h4>
+  <div class="slot" id="deaths_and_unscheduled_euthanasia" data-slot-type="text">{{deaths_and_unscheduled_euthanasia}}</div>
+
+  <h4 id="sec-7-7-3">7.7.3 Scheduled Euthanasia and Necropsy</h4>
+  <p>Animals were euthanized on Study Day <span class="slot" id="last_day_of_necropsy" data-slot-type="field">{{last_day_of_necropsy}}</span>. A gross examination was performed on external features and body orifices; the abdominal, thoracic, and cranial cavities; and major organs. Any abnormalities were noted. Tissue samples were collected from early terminated animals.</p>
+  <div class="slot" id="scheduled_euthanasia_and_necropsy" data-slot-type="text">{{scheduled_euthanasia_and_necropsy}}</div>
+
+  <h4 id="sec-7-7-4">7.7.4 Terminal Sample Collection</h4>
+  <div class="slot" id="terminal_sample_collection" data-slot-type="text">{{terminal_sample_collection}}</div>
+
+  <h4 id="sec-7-7-5">7.7.5 Tissue Collection/Preservation and Organ Weights</h4>
+  <p>The following tissue were collected as listed below:</p>
+  <h5>Table 2: Tissue Collection and Organ Weights</h5>
+  <div class="slot" id="tissue_collection_organ_weights_table" data-slot-type="table">{{tissue_collection_organ_weights_table}}</div>
+  <div class="slot" id="tissue_preservation_details" data-slot-type="text">{{tissue_preservation_details}}</div>
+
+  <h4 id="sec-7-7-6">7.7.6 Histopathology</h4>
+  <p>Select tissues were stained and evaluated for microscopic histopathology.</p>
+</section>
+
+<section id="sec-8">
+  <h2>8 RESULTS</h2>
+  <div class="slot" id="all_other_results" data-slot-type="text">{{all_other_results}}</div>
+
+  <h3 id="sec-8-1">8.1 Dose Analysis</h3>
+  <div class="slot" id="dose_analysis_key_results" data-slot-type="text">{{dose_analysis_key_results}}</div>
+
+  <h3 id="sec-8-2">8.2 In-Life Procedures</h3>
+  <p>All animals survived until their scheduled euthanasia. <span class="slot" id="in_life_procedures_key_results" data-slot-type="text">{{in_life_procedures_key_results}}</span> The detailed clinical observations are maintained in the study records.</p>
+</section>
+
+<section id="sec-9">
+  <h2>9 DISCUSSION</h2>
+  <div class="slot" id="discussion_and_interpretation" data-slot-type="text">{{discussion_and_interpretation}}</div>
+</section>
+
+<section id="sec-10">
+  <h2>10 CONCLUSIONS</h2>
+  <div class="slot" id="study_conclusions" data-slot-type="text">{{study_conclusions}}</div>
+</section>
+
+<section id="sec-11">
+  <h2>11 REFERENCES</h2>
+  {{references}}
+</section>
+
+<section id="sec-12">
+  <h2>12 APPENDICES</h2>
+
+  <h3>Appendix 1: Test and Control Article Characterization</h3>
+  <div class="slot" id="appendix_1_content" data-slot-type="text">{{test_and_control_article_characterization}}</div>
+</section>
+
+</body>
+</html>

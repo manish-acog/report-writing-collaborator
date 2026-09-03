@@ -168,7 +168,7 @@ def write_report(
     )
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
-    text = render(template_path, values, workspace_root)
+    text = render(template_path, values, workspace_root, output_dir=task_dir)
 
     report_path = task_dir / template_name
     report_path.write_text(text, encoding="utf-8")
@@ -220,7 +220,7 @@ def rerender_task(
         raise RuntimeError(f"Invalid JSON in persisted values: {values_path}") from error
 
     template_path = SKILLS_DIR / skill_name / _TEMPLATES_DIR_NAME / template_name
-    text = render(template_path, values, workspace_root.resolve())
+    text = render(template_path, values, workspace_root.resolve(), output_dir=task_dir)
 
     report_path = task_dir / template_name
     report_path.write_text(text, encoding="utf-8")
@@ -380,8 +380,21 @@ def _build_instruction(
     sections = [skill.instructions, f"## Source tree\n\n{source_tree}"]
     extracted = _render_already_extracted(values)
     if extracted:
-        sections.append(f"## Already extracted\n\n{extracted}")
-    sections.append(f"## Fields for this call\n\n{field_list}")
+        sections.append(
+            "## Already extracted\n\n"
+            "Values other call groups already found, for consistency only -- "
+            "reuse them to stay coherent (e.g. the same article name), but "
+            "don't re-search or re-verify them; they aren't part of this call.\n\n"
+            f"{extracted}"
+        )
+    if call_group.description:
+        sections.append(f"## How to approach this group\n\n{call_group.description}")
+    sections.append(
+        "## Fields for this call\n\n"
+        "This call is one part of a larger extraction split across many "
+        "groups. Only the fields below are yours to fill this turn -- "
+        f"focus your search on them.\n\n{field_list}"
+    )
     return "\n\n".join(sections)
 
 

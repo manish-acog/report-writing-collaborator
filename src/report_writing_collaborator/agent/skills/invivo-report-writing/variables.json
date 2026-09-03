@@ -1,0 +1,352 @@
+{
+  "call_groups": [
+    {
+      "name": "protocol_overview",
+      "variables": [
+        {
+          "name": "study_title",
+          "variable_type": "text",
+          "description": "Extract the study title from the context. Rephrase the title to include: Test Article identity, Test System (e.g., mouse, rat, guinea pig), Nature of the study (e.g., pharmacodynamic, pharmacology), Route of administration, Duration of study (number of days, weeks, or months). Title EXAMPLE: An 8-Week Repeat Dose Study Evaluating Plasma PAL and Phenylalanine Levels in Male ENU2 Mice Following 3x Weekly Subcutaneous Administration of 45kD POEGMA-PAL (BMN 390), 60kD POEGMA-PAL, or PEGylated PAL (BMN 165) Conjugates. The First Letter Of Each Word Should Be Capitalized. Primarily sourced from the Cayuse protocol."
+        },
+        {
+          "name": "study_number",
+          "variable_type": "text",
+          "description": "Extract the Study Number from the context. It usually starts with ARN-XX-XXX followed by numbers. Primarily sourced from the Cayuse protocol."
+        },
+        {
+          "name": "study_summary",
+          "variable_type": "text",
+          "description": "Extract the study summary along with proposed experiments. Return the full text exactly as written, preserving original wording and formatting. Primarily sourced from the Cayuse protocol."
+        },
+        {
+          "name": "study_objective",
+          "variable_type": "text",
+          "description": "Summarize the study objective. Primarily sourced from the Cayuse protocol."
+        },
+        {
+          "name": "justification_for_species_selection",
+          "variable_type": "text",
+          "description": "Extract the justification for species selection.  Provide a justification for the selection of this species `only if it's not a common strain` (mice: C57BL/6, BALB/c, CD-1; rats: Sprague Dawley, Wistar, Long Evans). Primarily sourced from the Cayuse protocol."
+        }
+      ]
+    },
+    {
+      "name": "drug_information",
+      "variables": [
+        {
+          "name": "dose_administration",
+          "variable_type": "text",
+          "description": "Extract dose administration of test article details from Route of Administration, Dose and Volume of Administration, Site and Frequency of Administration sections."
+        },
+        {
+          "name": "day_of_first_dose",
+          "variable_type": "text",
+          "description": "Extract the day of first dose."
+        },
+        {
+          "name": "last_day_of_necropsy",
+          "variable_type": "text",
+          "description": "Extract the last day of necropsy."
+        }
+      ]
+    },
+    {
+      "name": "experimental_articles",
+      "description": "Before answering any field below, resolve the study's own design once: which article is under test, and which arm is the actual comparator. The comparator may be the vehicle itself -- treat any 'ignore the vehicle' framing as conditional on a distinct, named non-vehicle control article actually existing (e.g. an older-generation drug in a studies comparing generations); if the vehicle alone is what the test article is compared against, the vehicle is the control article. Certificates of Testing and formulation/dosing-request records often refer to the same test or control article by an internal formulation code rather than the protocol's article name -- match these by dose level and chemical description before concluding a source doesn't cover that article. Answer every field below consistently against this resolution, not re-derived per field.",
+      "variables": [
+        {
+          "name": "test_and_control_article_characterization",
+          "variable_type": "text",
+          "description": "Extract how test and control articles are characterized.  "
+        },
+        {
+          "name": "dose_preparation_and_analysis_for_test_or_control_articles",
+          "variable_type": "text",
+          "description": "Extract dose preparation and analysis details for test or control articles.  "
+        },
+        {
+          "name": "number_of_study_groups",
+          "variable_type": "text",
+          "description": "Extract the number of study groups. Count different doses as different study groups.  "
+        },
+        {
+          "name": "test_article_name",
+          "variable_type": "text",
+          "description": "Extract the test article's name, including different concentrations used for the same article, if any."
+        },
+        {
+          "name": "test_article_description",
+          "variable_type": "text",
+          "description": "Extract the test article's description."
+        },
+        {
+          "name": "test_article_lot_number",
+          "variable_type": "text",
+          "description": "Extract the test article's lot number(s)."
+        },
+        {
+          "name": "test_article_expiration_date",
+          "variable_type": "text",
+          "description": "Extract the test article's expiration date."
+        },
+        {
+          "name": "test_article_manufacturer_supplier",
+          "variable_type": "text",
+          "description": "Extract the test article's manufacturer/supplier."
+        },
+        {
+          "name": "test_article_storage",
+          "variable_type": "text",
+          "description": "Extract the test article's storage information."
+        },
+        {
+          "name": "control_article_name",
+          "variable_type": "text",
+          "description": "Extract the control article's name, including different concentrations used for the same article, if any."
+        },
+        {
+          "name": "control_article_lot_number",
+          "variable_type": "text",
+          "description": "Extract the control article's lot number(s)."
+        },
+        {
+          "name": "control_article_expiration_date",
+          "variable_type": "text",
+          "description": "Extract the control article's expiration date."
+        },
+        {
+          "name": "control_article_manufacturer_supplier",
+          "variable_type": "text",
+          "description": "Extract the control article's manufacturer/supplier."
+        },
+        {
+          "name": "control_article_storage",
+          "variable_type": "text",
+          "description": "Extract the control article's storage information."
+        }
+      ]
+    },
+    {
+      "name": "animal_demographics",
+      "variables": [
+        {
+          "name": "animal_species",
+          "variable_type": "text",
+          "description": "Extract the animal species used in this study and return the species name exactly as written.  "
+        },
+        {
+          "name": "animal_strains",
+          "variable_type": "text",
+          "description": "Extract the animal strains used in this study and return the strain name exactly as written.  "
+        },
+        {
+          "name": "animal_supplier",
+          "variable_type": "text",
+          "description": "Extract the animal supplier used in this study and return the supplier name, city, state, country exactly as written.  "
+        },
+        {
+          "name": "total_number_of_animals",
+          "variable_type": "text",
+          "description": "Extract the total number of animals used in the study and include sex counts when available. Output format: '<total> (male: <number_of_males>, female: <number_of_females>)'. If only one sex count is explicitly provided and total is known, infer the missing sex as remainder: missing = total - provided_count. Use '<total> (gender not specified)' only when no sex-specific counts are available.  "
+        },
+        {
+          "name": "animal_identification",
+          "variable_type": "text",
+          "description": "Extract the method used to identify animals/organisms in detail (e.g., Tag, Tattoo).  "
+        },
+        {
+          "name": "age_of_dosing",
+          "variable_type": "text",
+          "description": "ONLY extract the age at dosing.  "
+        },
+        {
+          "name": "animal_weight_at_dosing",
+          "variable_type": "text",
+          "description": "ONLY extract the target weight at dosing with units.  "
+        }
+      ]
+    },
+    {
+      "name": "animal_care_and_euthanasia",
+      "variables": [
+        {
+          "name": "environmental_acclimation",
+          "variable_type": "text",
+          "description": "Extract the environmental acclimation period or process (You MUST only give me the time value (number of days or weeks), no prose).  "
+        },
+        {
+          "name": "housing_environment_conditions",
+          "variable_type": "text",
+          "description": "Extract housing and environmental conditions. Here's a template to use (edit as needed): 'Animals were housed in Makrolon cages with microisolator caps, using contact bedding, and provided with free access to a standard rodent chow which meets the requirements of the Guide for the Care and Use of Laboratory Animals. No other species were housed in the same room. Each cage was clearly labeled with a cage card indicating study No., cage No., group No., animal ID, strain, sex, birth date, receiving date, Study Director name and contact cell phone numbers. Environmental controls were set to maintain the following animal room conditions and monitored by the Testing Facility: temperature range of 18 to 26ºC, relative humidity range of 30 to 70%, 10 or greater air changes/hour, and a 12-hour light/12-hour dark cycle.'  "
+        },
+        {
+          "name": "food_and_water_provided",
+          "variable_type": "text",
+          "description": "Extract all available details about the food and water provided to animals. Convert to past tense.  "
+        },
+        {
+          "name": "additional_animal_information",
+          "variable_type": "text",
+          "description": "Summarize relevant details about the spare animals used in this study. Include species, strain, source/vendor, identification method, health status/quarantine, housing and enrichment, age and weight at dosing, and other notable animal-related information as a brief 1-2 paragraph summary.  "
+        },
+        {
+          "name": "methods_of_euthanasia",
+          "variable_type": "text",
+          "description": "Extract information about the methods of euthanasia used for Animals euthanized before scheduled termination and for Animals euthanized at scheduled termination. Include details about the method, agent, and any relevant notes.  "
+        },
+        {
+          "name": "deaths_and_unscheduled_euthanasia",
+          "variable_type": "text",
+          "description": "Extract a summary of procedures from Veterinary Care section for deaths and unscheduled euthanasia, including who determines unscheduled euthanasia, methods used, and necropsy type. Provide a concise paragraph.  "
+        },
+        {
+          "name": "scheduled_euthanasia_and_necropsy",
+          "variable_type": "text",
+          "description": "Extract a summary of procedures for scheduled euthanasia and necropsy, including timing, methods, and necropsy procedures. Provide a concise paragraph.  "
+        }
+      ]
+    },
+    {
+      "name": "experimental_design_and_sampling",
+      "variables": [
+        {
+          "name": "experimental_design",
+          "variable_type": "text",
+          "description": "Summarize the experimental design from the section labeled 'Experimental Information'. Preserve original wording, without the section heading. DO NOT include the experimental design table.  "
+        },
+        {
+          "name": "experimental_design_table",
+          "variable_type": "table",
+          "description": "Extract the experimental design table. Understand the table structure and information conveyed and sanitize the table to include correct information under the correct column names. If values appear shifted into neighboring cells, correct the placement using header meaning, row context, data type patterns, and consistency with nearby rows.  "
+        },
+        {
+          "name": "justification_for_dosage_selection",
+          "variable_type": "text",
+          "description": "Extract the full text that provides justification for dose selection and route of administration, including dose concentration, compound names, endotoxin levels, vehicle control, route, and calculation notes. Preserve original wording.  "
+        },
+        {
+          "name": "terminal_sample_collection",
+          "variable_type": "text",
+          "description": "Extract a summary of when and how terminal samples were collected for each sample type, specifying timing, procedures used, sample types, and processing or storage details.  "
+        }
+      ]
+    },
+    {
+      "name": "procedures_samples_tissues_deviations",
+      "variables": [
+        {
+          "name": "timepoints_when_animals_observed",
+          "variable_type": "text",
+          "description": "Summarize in brief the timepoints when animals were observed from the given table.  "
+        },
+        {
+          "name": "timepoints_when_body_weights_measured",
+          "variable_type": "text",
+          "description": "Summarize in brief the timepoints when body weights were measured from the given table.  "
+        },
+        {
+          "name": "in_life_procedures",
+          "variable_type": "text",
+          "description": "Extract other in-life procedures, measures, observations taken. If available, also add key efficacy endpoints first then secondary efficacy endpoints - each in a separate subsection.  "
+        },
+        {
+          "name": "in_life_sample_collections",
+          "variable_type": "text",
+          "description": "Extract details on when and how samples were collected for each sample type from the given table. Primarily sourced from the Cayuse protocol."
+        },
+        {
+          "name": "in_life_sample_analysis",
+          "variable_type": "text",
+          "description": "Extract all the sample analysis details from the given table.  "
+        },
+        {
+          "name": "tissue_collection_organ_weights_table",
+          "variable_type": "table",
+          "description": "Extract tissue collection organ weights table table but only include the tissues relevant to this study.  "
+        },
+        {
+          "name": "tissue_preservation_details",
+          "variable_type": "text",
+          "description": "Extract the tissue preservation details.  "
+        },
+        {
+          "name": "deviations_table",
+          "variable_type": "table",
+          "description": "Extract the procedures where deviations were made, and make a table with procedure as one column and deviation details as another column.  "
+        }
+      ]
+    },
+    {
+      "name": "study_personnel",
+      "variables": [
+        {
+          "name": "study_director",
+          "variable_type": "text",
+          "description": "Extract the Study Director name.  "
+        },
+        {
+          "name": "report_author",
+          "variable_type": "text",
+          "description": "Extract the Report Author name and other details if present.  "
+        },
+        {
+          "name": "principal_investigator",
+          "variable_type": "text",
+          "description": "Extract the Principal Investigator (sometimes named PI in the protocol) name and other details if present. Format: Name: <name> \n Phone: <phone> \n Email: <email>.  "
+        },
+        {
+          "name": "additional_study_personnel",
+          "variable_type": "text",
+          "description": "Extract ALL additional study personnel / research staff members.  "
+        }
+      ]
+    },
+    {
+      "name": "results",
+      "description": "This study's actual measured outcome (e.g. an expression or biomarker readout) often lives only in chart or plot images attached under a Benchling entry's own results-style heading (e.g. 'Results', 'Data', 'Analysis'), with little or no describing text alongside them. Before treating a results field as not_found or methods-only, check for that shape -- a heading followed by images and thin text -- and inspect_image those images; the finding is usually in the image, not the surrounding prose.",
+      "variables": [
+        {
+          "name": "executive_summary_of_key_results",
+          "variable_type": "text",
+          "description": "Summarize the key results of the study in brief.  "
+        },
+        {
+          "name": "in_life_procedures_key_results",
+          "variable_type": "text",
+          "description": "Add key results for all in-life procedures including: animal mortality/morbidity, observations, body weights, other procedures. Include animal body weights (individual and mean/SD) over the duration of the study and give a brief written description.  "
+        },
+        {
+          "name": "dose_analysis_key_results",
+          "variable_type": "text",
+          "description": "Extract all key results for dose analysis in this study.  "
+        },
+        {
+          "name": "all_other_results",
+          "variable_type": "text",
+          "description": "Extract all results for this study, excluding results for dose analysis and in-life procedures.  "
+        }
+      ]
+    },
+    {
+      "name": "conclusions",
+      "description": "Base every field below only on the Benchling experimental results -- including attached files, and images inspected via inspect_image where a results section is image-only. Use the Cayuse protocol only to understand the study's objective and design, never as a source of findings; do not reach for it to fill a gap in Benchling's results. If, after checking both text and images, Benchling doesn't contain enough result data to support a conclusion, say so plainly rather than forcing one.",
+      "variables": [
+        {
+          "name": "study_conclusions_brief_summary",
+          "variable_type": "text",
+          "description": "Capture the overarching findings relevant to the study objective in 2-3 concise sentences, because it's a brief summary."
+        },
+        {
+          "name": "study_conclusions",
+          "variable_type": "text",
+          "description": "Capture the overarching findings relevant to the study objective, in a paragraph or bullet-point style."
+        },
+        {
+          "name": "discussion_and_interpretation",
+          "variable_type": "text",
+          "description": "Discuss the significance and implications of the findings relevant to the study objective."
+        }
+      ]
+    }
+  ]
+}

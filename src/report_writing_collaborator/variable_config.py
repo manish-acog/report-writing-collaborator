@@ -85,6 +85,12 @@ class VariableDef:
 class CallGroup:
     name: str
     variables: tuple[VariableDef, ...]
+    # Optional reasoning scaffold shared by every variable in this group --
+    # e.g. how to resolve test vs. control article roles before answering
+    # any one field -- kept separate from each field's own description so
+    # it's read once, not repeated per field. Empty when a group only needs
+    # simple per-field lookups.
+    description: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,13 +129,14 @@ def _parse_call_group(raw: object, seen_names: set[str], path: Path) -> CallGrou
 
     name = raw.get("name")
     variables_raw = raw.get("variables")
+    description = raw.get("description", "")
     if not isinstance(name, str) or not name.strip():
         raise VariableConfigError(f"call_group is missing a 'name': {path}")
     if not isinstance(variables_raw, list) or not variables_raw:
         raise VariableConfigError(f"call_group '{name}' has no variables: {path}")
 
     variables = tuple(_parse_variable(v, seen_names, path) for v in variables_raw)
-    return CallGroup(name=name, variables=variables)
+    return CallGroup(name=name, variables=variables, description=str(description))
 
 
 def _parse_variable(raw: object, seen_names: set[str], path: Path) -> VariableDef:
