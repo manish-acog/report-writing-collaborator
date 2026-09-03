@@ -305,3 +305,42 @@ match). Regression test:
 matches, proving the size cap (not the count cap) is what stops it.
 Full preflight after: 151 passed, `ruff check .` clean, `ty check src`
 clean.
+
+**Addendum: group-level reasoning scaffold, and a stale citation link.**
+`CallGroup` gained an optional `description: str = ""` (`variable_config.py`),
+read from `variables.json`'s own per-group `"description"` key. When
+present, `_build_instruction` renders it as a `## How to approach this
+group` section, between `## Already extracted` and `## Fields for this
+call` — a shared reasoning scaffold for a whole group's fields (e.g.
+resolving control-vs-vehicle roles, or cross-referencing formulation
+codes across sources) instead of repeating the same domain rule in every
+affected field's own description. `## Already extracted` and `## Fields
+for this call` also gained explanatory prose (values are for consistency
+only, not re-verification; this call is one part of a larger split) —
+the literal heading text (`"## Already extracted"`, `"## Fields for this
+call"`) is unchanged, so existing substring-matching tests kept passing.
+
+Separately, `report_renderer.render` gained `output_dir`, fixing citation
+links that resolved relative to `workspace_root` instead of where the
+report is actually written — broken every time, since `write_report`
+always writes to `.tasks/<task_id>/`, never `workspace_root` itself.
+`_relative_link_base(workspace_root, output_dir)` computes the prefix a
+link needs from `output_dir` back to `workspace_root`; empty when they're
+the same directory (`rerender_task`'s and every renderer test's common
+case). `write_report`/`rerender_task` now pass `output_dir=task_dir`.
+
+One pre-existing test asserted the old, broken link format
+(`test_write_report_merges_call_groups_and_renders`) — fixed to expect
+the `../../workspace/`-prefixed link this fix actually produces. Added
+`test_render_rebases_citation_links_when_output_dir_differs` (renderer)
+and `test_build_instruction_renders_group_description_when_present`/
+`test_build_instruction_omits_group_description_section_when_absent`
+(orchestrator) — the two new behaviors this had no coverage for. Also
+dropped `in_life_sample_collections`'s leftover `"Primarily sourced from
+the Cayuse protocol."` phrasing (`invivo-report-writing/variables.json`)
+ — the same narrow-hint pattern that caused the `experimental_articles`
+CoT-source-coverage failure, left behind when that group's fields were
+fixed but this one field's wasn't. No group-level scaffold added for
+it — no observed failure yet, unlike `experimental_articles`; revisit if
+one shows up. Full preflight after: `ruff check .` clean, `ty check src`
+clean, full suite passing.

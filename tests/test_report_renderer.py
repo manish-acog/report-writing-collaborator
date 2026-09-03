@@ -107,6 +107,17 @@ def test_render_substitutes_found_and_not_found_fields(tmp_path: Path) -> None:
     assert "Not addressed in the available evidence." in result
 
 
+def test_render_rebases_citation_links_when_output_dir_differs(tmp_path: Path) -> None:
+    workspace = _make_workspace(tmp_path)
+    output_dir = tmp_path / "tasks" / "task_1"
+    output_dir.mkdir(parents=True)
+    template = _write_template(tmp_path, "report.md", "{{title}}{{references}}")
+
+    result = render(template, _VALUES, workspace, output_dir=output_dir)
+
+    assert "[Protocol.pdf](../../workspace/sources/src_a/original.pdf#page=2)" in result
+
+
 def test_render_markdown_references_are_numbered_in_first_seen_order(tmp_path: Path) -> None:
     template = _write_template(tmp_path, "report.md", "{{title}}{{conclusion}}{{references}}")
     values = {
