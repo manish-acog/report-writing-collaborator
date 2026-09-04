@@ -252,7 +252,7 @@
         {
           "name": "in_life_sample_collections",
           "variable_type": "text",
-          "description": "Extract details on when and how samples were collected for each sample type from the given table. Primarily sourced from the Cayuse protocol."
+          "description": "Extract details on when and how samples were collected for each sample type from the given table."
         },
         {
           "name": "in_life_sample_analysis",

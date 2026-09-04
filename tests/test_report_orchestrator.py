@@ -35,7 +35,11 @@ def _make_skill_dir(
     return skill_dir
 
 
-def _make_report_skill(skills_dir: Path, requires_skills: list[str] | None = None) -> Path:
+def _make_report_skill(
+    skills_dir: Path,
+    requires_skills: list[str] | None = None,
+    group_description: str = "",
+) -> Path:
     skill_dir = _make_skill_dir(
         skills_dir,
         "general-report-writing",
@@ -49,6 +53,7 @@ def _make_report_skill(skills_dir: Path, requires_skills: list[str] | None = Non
                 "call_groups": [
                     {
                         "name": "report_fields",
+                        "description": group_description,
                         "variables": [
                             {"name": "title", "variable_type": "text", "description": "Title."},
                             {
@@ -208,6 +213,33 @@ def test_build_instruction_includes_prior_found_values_not_not_found(tmp_path: P
     assert "abstract" not in instruction.split("## Already extracted")[1].split("## Fields")[0]
 
 
+def test_build_instruction_renders_group_description_when_present(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill = load_skill_from_dir(
+        _make_report_skill(skills_dir, group_description="Resolve X before answering.")
+    )
+    config = load_variables_config(skills_dir / "general-report-writing" / "variables.json")
+
+    instruction = report_orchestrator._build_instruction(
+        skill, config.call_groups[0], "- src_a: Protocol.pdf", {}
+    )
+
+    assert "## How to approach this group" in instruction
+    assert "Resolve X before answering." in instruction
+
+
+def test_build_instruction_omits_group_description_section_when_absent(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill = load_skill_from_dir(_make_report_skill(skills_dir))
+    config = load_variables_config(skills_dir / "general-report-writing" / "variables.json")
+
+    instruction = report_orchestrator._build_instruction(
+        skill, config.call_groups[0], "- src_a: Protocol.pdf", {}
+    )
+
+    assert "## How to approach this group" not in instruction
+
+
 def test_general_report_skill_loads_shared_grounding_rules() -> None:
     general_skill = load_skill_from_dir(report_orchestrator.SKILLS_DIR / "general-report-writing")
     grounding_skill = load_skill_from_dir(report_orchestrator.SKILLS_DIR / "evidence-grounding")
@@ -269,7 +301,10 @@ def test_write_report_merges_call_groups_and_renders(
     assert run_call.call_count == 1
     assert '# My Report<sup><a href="#ref-1">1</a></sup>' in result.text
     assert "Not addressed in the available evidence." in result.text
-    assert "[Protocol.pdf](sources/src_a/original.pdf#page=1) (protocol), page 1" in result.text
+    assert (
+        "[Protocol.pdf](../../workspace/sources/src_a/original.pdf#page=1) (protocol), page 1"
+        in result.text
+    )
 
     assert result.task_dir == workspace.parent / ".tasks" / result.task_id
     assert (result.task_dir / "sessions.db").exists()
