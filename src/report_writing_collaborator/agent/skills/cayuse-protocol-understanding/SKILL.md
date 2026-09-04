@@ -42,6 +42,17 @@ authored content — the actual protocol content is the plain text immediately
 following it. Attribute the answer, not the question: don't quote the bold
 prompt as if it were the PI's statement.
 
+## A study's groups aren't a fixed shape — read its own group-definition table
+
+Don't assume what a "control" or "comparator" is from convention (e.g. an
+older-generation drug, a second active compound); some studies compare a
+test article only against its own vehicle, others against a distinct
+non-vehicle article, others against more than one. The protocol's own
+group-definition table (in Experimental Design or similar) states this
+per study — resolve each study's actual design from that table before
+labeling any article's role, and treat every other field that names an
+article by its role the same way once resolved.
+
 ## Table quirks
 
 Dosing/design tables (e.g. the experimental-design group table) use `"` as a

@@ -87,7 +87,9 @@ To the best of our knowledge, the report accurately describes the study conduct 
 | Role | Name | Title |
 |---|---|---|
 | Report Author | {{report_author}} | Report Author |
-| Study Director / Principal Investigator | {{study_director}} | Study Director (or Principal Investigator for In-Life or In Vivo Scientist Lead) and Author |
+| Study Director / Principal Investigator | {{study_director_or_principal_investigator}} | Study Director (or Principal Investigator for In-Life or In-Vivo Scientist Lead) and Author |
+| Research Project Lead | {{research_project_lead}} | Research Project Lead |
+| TA Head | {{ta_head}} | Management |
 
 ## 2 SUMMARY
 

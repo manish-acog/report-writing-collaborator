@@ -73,6 +73,9 @@ _RUNNER_APP_NAME = "report_orchestrator"
 _RUNNER_USER_ID = "report_orchestrator"
 _SESSIONS_DB_NAME = "sessions.db"
 _TASKS_DIR_NAME = ".tasks"
+_STUDY_DIRECTOR_KEY = "study_director"
+_PRINCIPAL_INVESTIGATOR_KEY = "principal_investigator"
+_SIGNATORY_KEY = "study_director_or_principal_investigator"
 _TASK_FILE_NAME = "task.json"
 _VALUES_FILE_NAME = "values.json"
 _USAGE_FILE_NAME = "usage.json"
@@ -168,7 +171,7 @@ def write_report(
     )
 
     template_path = skill_dir / _TEMPLATES_DIR_NAME / template_name
-    text = render(template_path, values, workspace_root, output_dir=task_dir)
+    text = render(template_path, _with_computed_fields(values), workspace_root, output_dir=task_dir)
 
     report_path = task_dir / template_name
     report_path.write_text(text, encoding="utf-8")
@@ -220,7 +223,7 @@ def rerender_task(
         raise RuntimeError(f"Invalid JSON in persisted values: {values_path}") from error
 
     template_path = SKILLS_DIR / skill_name / _TEMPLATES_DIR_NAME / template_name
-    text = render(template_path, values, workspace_root.resolve(), output_dir=task_dir)
+    text = render(template_path, _with_computed_fields(values), workspace_root.resolve(), output_dir=task_dir)
 
     report_path = task_dir / template_name
     report_path.write_text(text, encoding="utf-8")
@@ -396,6 +399,27 @@ def _build_instruction(
         f"focus your search on them.\n\n{field_list}"
     )
     return "\n\n".join(sections)
+
+
+def _with_computed_fields(values: dict[str, dict]) -> dict[str, dict]:
+    """Adds render-only derived fields on top of extracted values.
+
+    The Approval-page signatory is one merged slot in the report template
+    itself -- Study Director, or Principal Investigator for an in-life/
+    in-vivo study (this skill's only kind) -- not two separate people.
+    Prefers whichever was actually found, Principal Investigator first
+    since every report this skill produces is in-vivo. Computed at
+    render time only; never persisted to values.json.
+    """
+    computed = dict(values)
+    for key in (_PRINCIPAL_INVESTIGATOR_KEY, _STUDY_DIRECTOR_KEY):
+        result = values.get(key)
+        if result and result.get("status") == "found":
+            computed[_SIGNATORY_KEY] = result
+            break
+    else:
+        computed[_SIGNATORY_KEY] = {"status": "not_found"}
+    return computed
 
 
 def _render_already_extracted(values: dict[str, dict]) -> str:

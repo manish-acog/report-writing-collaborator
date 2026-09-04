@@ -68,6 +68,25 @@ Benchling's custom fields (e.g. `Research Project Code`, `Study Number`)
 always print last, after every dated day — treat them as entry-level
 metadata (like the header block), not as the entry's concluding content.
 
+## A results-style section's actual finding may live only in an attached image
+
+Benchling entries often record a chart, plot, or gel image as the finding
+itself, with only a short caption or none — this is a normal way results
+get logged here, not a gap in the entry. A heading like "Results," "Data,"
+or "Analysis" followed by images and little surrounding text is a sign the
+finding is in the image; inspect it before concluding the entry has
+nothing to say.
+
+## An attached record may name the same material differently than the study does
+
+A promoted attachment (e.g. a Certificate of Analysis, formulation, or
+dosing record) often identifies test/control material by its own internal
+code, batch, or lot designation rather than whatever name the study
+protocol uses for that article. Don't rule out an attachment as
+irrelevant on name mismatch alone — resolve the link through shared
+attributes the two documents do share (dose level, chemistry, timing,
+study/group identifiers) before treating either as silent on the other.
+
 ## Core vocabulary
 
 Entry (the notebook record itself) vs. attachment (a promoted child

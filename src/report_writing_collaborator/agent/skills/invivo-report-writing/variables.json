@@ -6,7 +6,7 @@
         {
           "name": "study_title",
           "variable_type": "text",
-          "description": "Extract the study title from the context. Rephrase the title to include: Test Article identity, Test System (e.g., mouse, rat, guinea pig), Nature of the study (e.g., pharmacodynamic, pharmacology), Route of administration, Duration of study (number of days, weeks, or months). Title EXAMPLE: An 8-Week Repeat Dose Study Evaluating Plasma PAL and Phenylalanine Levels in Male ENU2 Mice Following 3x Weekly Subcutaneous Administration of 45kD POEGMA-PAL (BMN 390), 60kD POEGMA-PAL, or PEGylated PAL (BMN 165) Conjugates. The First Letter Of Each Word Should Be Capitalized. Primarily sourced from the Cayuse protocol."
+          "description": "Compose a descriptive study title from the context, not a copy of any section heading. Work in whichever of these the study actually has: test article identity, test system/species, nature of the study (e.g. pharmacodynamic, pharmacokinetic, toxicology), route of administration, dose or duration. Title case throughout. Example shape only, not a template to fill in verbatim: 'An 8-Week Repeat Dose Study Evaluating Plasma PAL and Phenylalanine Levels in Male ENU2 Mice Following 3x Weekly Subcutaneous Administration of 45kD POEGMA-PAL (BMN 390)'. Primarily sourced from the Cayuse protocol."
         },
         {
           "name": "study_number",
@@ -26,7 +26,7 @@
         {
           "name": "justification_for_species_selection",
           "variable_type": "text",
-          "description": "Extract the justification for species selection.  Provide a justification for the selection of this species `only if it's not a common strain` (mice: C57BL/6, BALB/c, CD-1; rats: Sprague Dawley, Wistar, Long Evans). Primarily sourced from the Cayuse protocol."
+          "description": "Extract the justification for species selection. State a justification only if the protocol itself gives one, or if the species/strain choice is unusual enough to need scientific explaining (e.g. not a standard laboratory strain for this kind of study) -- don't fabricate a justification for a routine choice the protocol doesn't explain. Primarily sourced from the Cayuse protocol."
         }
       ]
     },
@@ -52,7 +52,7 @@
     },
     {
       "name": "experimental_articles",
-      "description": "Before answering any field below, resolve the study's own design once: which article is under test, and which arm is the actual comparator. The comparator may be the vehicle itself -- treat any 'ignore the vehicle' framing as conditional on a distinct, named non-vehicle control article actually existing (e.g. an older-generation drug in a studies comparing generations); if the vehicle alone is what the test article is compared against, the vehicle is the control article. Certificates of Testing and formulation/dosing-request records often refer to the same test or control article by an internal formulation code rather than the protocol's article name -- match these by dose level and chemical description before concluding a source doesn't cover that article. Answer every field below consistently against this resolution, not re-derived per field.",
+      "description": "Before answering any field below, resolve the study's own design once: which article is under test, and which arm is the actual comparator. The comparator may be the vehicle itself -- treat any 'ignore the vehicle' framing as conditional on a distinct, named non-vehicle control article actually existing (e.g. an older-generation drug in a studies comparing generations); if the vehicle alone is what the test article is compared against, the vehicle is the control article. Certificates of Testing and formulation/dosing-request records often refer to the same test or control article by an internal formulation code rather than the protocol's article name -- match these by dose level and chemical description before concluding a source doesn't cover that article. A vehicle's own characterization (its lot, expiration, manufacturer, storage) may be recorded separately from the test article's -- e.g. in its own formulation or component-supplier records -- rather than left out entirely; check for those before returning not_found on a vehicle-as-control field. Answer every field below consistently against this resolution, not re-derived per field.",
       "variables": [
         {
           "name": "test_and_control_article_characterization",
@@ -177,7 +177,7 @@
         {
           "name": "housing_environment_conditions",
           "variable_type": "text",
-          "description": "Extract housing and environmental conditions. Here's a template to use (edit as needed): 'Animals were housed in Makrolon cages with microisolator caps, using contact bedding, and provided with free access to a standard rodent chow which meets the requirements of the Guide for the Care and Use of Laboratory Animals. No other species were housed in the same room. Each cage was clearly labeled with a cage card indicating study No., cage No., group No., animal ID, strain, sex, birth date, receiving date, Study Director name and contact cell phone numbers. Environmental controls were set to maintain the following animal room conditions and monitored by the Testing Facility: temperature range of 18 to 26ºC, relative humidity range of 30 to 70%, 10 or greater air changes/hour, and a 12-hour light/12-hour dark cycle.'  "
+          "description": "Extract housing and environmental conditions from the protocol's own housing/environment section: caging and bedding, diet standard, room temperature/humidity/light-cycle controls, animal room occupancy, and cage labeling practice. Write it as one prose paragraph in past tense, using the protocol's own stated values where given; fall back to standard IACUC-facility conventions only for whatever the protocol itself leaves unstated. Style reference only, not a fill-in template: 'Animals were housed in Makrolon cages with microisolator caps, using contact bedding, and provided with free access to a standard rodent chow which meets the requirements of the Guide for the Care and Use of Laboratory Animals.'  "
         },
         {
           "name": "food_and_water_provided",
@@ -247,7 +247,7 @@
         {
           "name": "in_life_procedures",
           "variable_type": "text",
-          "description": "Extract other in-life procedures, measures, observations taken. If available, also add key efficacy endpoints first then secondary efficacy endpoints - each in a separate subsection.  "
+          "description": "Extract other in-life procedures, measures, observations taken. If available, also add key efficacy endpoints first then secondary efficacy endpoints, each introduced with a plain-text label (e.g. 'Key efficacy endpoints: ...') rather than a heading.  "
         },
         {
           "name": "in_life_sample_collections",
@@ -298,6 +298,16 @@
           "name": "additional_study_personnel",
           "variable_type": "text",
           "description": "Extract ALL additional study personnel / research staff members.  "
+        },
+        {
+          "name": "research_project_lead",
+          "variable_type": "text",
+          "description": "Extract the Research Project Lead name and other details if present.  "
+        },
+        {
+          "name": "ta_head",
+          "variable_type": "text",
+          "description": "Extract the TA (Therapeutic Area) Head or equivalent management sign-off name and other details if present.  "
         }
       ]
     },
@@ -339,7 +349,7 @@
         {
           "name": "study_conclusions",
           "variable_type": "text",
-          "description": "Capture the overarching findings relevant to the study objective, in a paragraph or bullet-point style."
+          "description": "Capture the overarching findings relevant to the study objective, as a paragraph or as separate plain sentences, one per line, not a Markdown bullet list."
         },
         {
           "name": "discussion_and_interpretation",
